@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
+from utils import to_default_device
 
 # ------------------------------ ResNet ------------------------------ #
 
@@ -62,7 +63,7 @@ class Classifier_RESNET(nn.Module):
         self.initialize_weights()
         
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
 
     def forward(self, x):
         out = self.conv1(x)                                     # Convolution 1
@@ -94,6 +95,8 @@ class Classifier_RESNET(nn.Module):
         for batch_idx, (X, y) in enumerate(train_loader):
             self.optimizer.zero_grad()
             X = X.unsqueeze(1)
+            X = to_default_device(X)
+            y = to_default_device(y)
             output = self(X)
             loss = self.criterion(output.float(), y.float())
             loss.backward()
@@ -112,24 +115,9 @@ class Classifier_RESNET(nn.Module):
         with torch.no_grad():
             x, y = test_data
             x = x.unsqueeze(1)
+            x = to_default_device(x)
+            y = to_default_device(y)
             y_pred = self(x)
             accuracy = (y_pred.argmax(dim=1) == y.argmax(dim=1)).float().mean().item()
             f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred.argmax(dim=1).cpu().numpy(), average='weighted')
             return accuracy, f1
-
-        
-    
-# ------------------------------ Utils ------------------------------ #
-
-def get_default_device():
-    """Pick GPU if available, else CPU"""
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    else:
-        return torch.device('cpu')
-    
-def to_device(data, device):
-    """Move tensor(s) to chosen device"""
-    if isinstance(data, (list,tuple)):
-        return [to_device(x, device) for x in data]
-    return data.to(device, non_blocking=True)

@@ -6,27 +6,25 @@ import argparse
 import torch    
 import tqdm
 import numpy as np
-from VAE import VAE
-from loader import getUCRLoader, augment_loader
 import matplotlib.pyplot as plt
+from VAE import VAE
 from ClassifierModel import Classifier_RESNET
-
-#---------------------------------- Device ----------------------------------#
-
-global torch_device 
-torch_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from loader import getUCRLoader, augment_loader, tw_loader
+from utils import to_default_device
 
 #---------------------------------- Parser ----------------------------------#  
 
 def get_parser():
     parser = argparse.ArgumentParser(description='LSTSAUG')
-    parser.add_argument('--dataset', type=str, default='ECG5000',
+    parser.add_argument('--data_dir', type=str, default='../../FastAutoAugment-Time-Series/data',
+                        help='Directory containing the dataset')
+    parser.add_argument('--dataset', type=str, default='Symbols',
                         help='Directory containing the dataset')
     parser.add_argument('--model_dir', type=str, default='models',
                         help='Directory to save models')
     parser.add_argument('--results_dir', type=str, default='results',
                         help='Directory to save results')
-    parser.add_argument('--num_epochs', type=int, default=250,
+    parser.add_argument('--num_epochs', type=int, default=400,
                         help='Number of epochs to train the model')
     parser.add_argument('--batch_size', type=int, default=64,
                         help='Batch size for training')
@@ -44,18 +42,24 @@ def get_parser():
                         help='Test the augmentation using the trained VAE')
     parser.add_argument('--use_trained', action='store_true', default=False,
                         help='Use a trained model for augmentation')    
+    parser.add_argument('--baseline', action='store_true', default=False,
+                        help='Train a baseline classifier')
+    parser.add_argument('--num_samples', type=int, default=1,
+                        help='Number of synthetic data samples to generate for each input sample')
+    parser.add_argument('--noise', type=float, default=0.1,
+                        help='Noise level for the latent space perturbation')
     return parser
 
 #---------------------------------- Plotting ----------------------------------#
 
-def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5):
+def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=1):
     # Set the model to evaluation mode
     vae.eval()
     
     # Randomly sample a data point from the test dataset
     idx = np.random.randint(len(test_dataset))
     x= test_dataset[0][idx]
-    x = x.to(torch_device).unsqueeze(0)
+    x = to_default_device(x.unsqueeze(0))
     
     # Get the latent space representation
     with torch.no_grad():
@@ -64,7 +68,7 @@ def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5):
         z = vae.reparameterize(mu, log_var)
     
     # Generate neighbors by adding small random noise to the latent vector
-    neighbors = [z + torch.randn_like(z) * 1 for _ in range(num_neighbors)]
+    neighbors = [z + torch.randn_like(z) * distance for _ in range(num_neighbors)]
     neighbors.append(z)  # Include the original point for reference
     neighbors = torch.cat(neighbors, dim=0)
     
@@ -108,12 +112,12 @@ def main() :
     os.makedirs(args.results_dir, exist_ok=True)
     
     # Create a data loader for training
-    train_loader, test_dataset, nb_classes = getUCRLoader(args.dataset, args.batch_size)
+    train_loader, test_dataset, nb_classes = getUCRLoader(args.data_dir, args.dataset, args.batch_size)
     
     # Initialize the VAE model
     input_dim = train_loader.dataset[0][0].shape[0]
     print("Detected input dimension: ", input_dim)
-    vae = VAE(input_dim, args.latent_dim, nb_classes).to(torch_device)
+    vae = to_default_device(VAE(input_dim, args.latent_dim, nb_classes))
     
     
     if not args.use_trained:
@@ -124,6 +128,7 @@ def main() :
             wandb.watch(vae)
         
         # Train 
+        print('Training the VAE model...')
         for epoch in tqdm.tqdm(range(args.num_epochs)):
             train_loss, train_recon_loss, train_kl_div, train_class_loss = vae.train_epoch(train_loader)
             
@@ -153,44 +158,47 @@ def main() :
         vae.load_state_dict(torch.load(model_path))
         vae.eval()
         
-        plot_latent_space_neighbors(vae, test_dataset)
+        plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=args.noise)
     
     if args.test_augment :
         # Baseline classifier training
-        # classifier = Classifier_RESNET(input_dim, nb_classes).to(torch_device)
-        # if args.wandb:
-        #     wandb.init(project='lstsaug',
-        #                 config=vars(args),
-        #                 name=f'{args.dataset}_classifier-{args.batch_size}bs-{args.num_epochs}e')
-        #     wandb.watch(classifier)
-        
-        # for epoch in tqdm.tqdm(range(args.num_epochs)):
-        #     train_loss, train_acc = classifier.train_epoch(train_loader)
-        #     # test_acc, test_f1 = classifier.validate(test_dataset)
-        #     if epoch % 10 == 0:
-        #         test_acc, test_f1 = classifier.validate(test_dataset)
-        #     if args.wandb:
-        #         wandb.log({ 'train_loss': train_loss,
-        #                     'train_accuracy': train_acc,
-        #                     'test_accuracy': test_acc,
-        #                     'test_f1': test_f1})
-                
+        if args.baseline:
+            classifier = to_default_device(Classifier_RESNET(input_dim, nb_classes))
+            if args.wandb:
+                wandb.init(project='lstsaug',
+                            config=vars(args),
+                            name=f'{args.dataset}_classifier-{args.batch_size}bs-{args.num_epochs}e')
+                wandb.watch(classifier)
+            
+            print('Training the classifier model...')
+            for epoch in tqdm.tqdm(range(args.num_epochs)):
+                train_loss, train_acc = classifier.train_epoch(train_loader)
+                # test_acc, test_f1 = classifier.validate(test_dataset)
+                if epoch % 10 == 0:
+                    test_acc, test_f1 = classifier.validate(test_dataset)
+                if args.wandb:
+                    wandb.log({ 'train_loss': train_loss,
+                                'train_accuracy': train_acc,
+                                'test_accuracy': test_acc,
+                                'test_f1': test_f1})
+                    
 
-        # if args.wandb:
-        #     wandb.finish()
+            if args.wandb:
+                wandb.finish()
             
         # Augment the dataset
-        num_samples = 5
-        augmented_loader = augment_loader(train_loader, vae, num_samples)
+        augmented_loader = augment_loader(train_loader, vae, args.num_samples, distance=args.noise)
+        # augmented_loader = tw_loader(train_loader,num_samples)
         
         # Train the classifier on the augmented dataset
-        classifier_augmented = Classifier_RESNET(input_dim, nb_classes).to(torch_device)
+        classifier_augmented = to_default_device(Classifier_RESNET(input_dim, nb_classes))
         if args.wandb:
             wandb.init(project='lstsaug',
                         config=vars(args),
                         name=f'{args.dataset}_classifier_augmented-{args.batch_size}bs-{args.num_epochs}e')
             wandb.watch(classifier_augmented)
             
+        print('Training the classifier model on the augmented dataset...')
         for epoch in tqdm.tqdm(range(args.num_epochs)):
             train_loss, train_acc = classifier_augmented.train_epoch(augmented_loader)
             test_acc, test_f1 = classifier_augmented.validate(test_dataset)

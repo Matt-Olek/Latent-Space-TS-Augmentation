@@ -3,8 +3,9 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.metrics import f1_score
 import numpy as np
+from sklearn.metrics import f1_score
+from utils import to_default_device
 
 #---------------------------------- VAE Model ----------------------------------#
 
@@ -43,7 +44,7 @@ class VAE(nn.Module):
 
         self.optimizer = optim.Adam(self.parameters(), lr=0.01)
         self.loss_function = nn.CrossEntropyLoss()
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=50)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=150)
 
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
@@ -67,7 +68,8 @@ class VAE(nn.Module):
         train_class_loss = 0
         for i, (batch, target) in enumerate(data_loader):
             self.optimizer.zero_grad()
-            x = batch
+            x = to_default_device(batch)
+            target = to_default_device(target)
             x_hat, mu, log_var, y_pred = self(x)
             recon_loss = nn.functional.mse_loss(x_hat, x, reduction='sum')
             kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
@@ -96,6 +98,8 @@ class VAE(nn.Module):
         self.eval()
         with torch.no_grad():
             x, y = test_data
+            x = to_default_device(x)
+            y = to_default_device(y)
             x_hat, mu, log_var, y_pred = self(x)
             accuracy = (y_pred.argmax(dim=1) == y.argmax(dim=1)).float().mean().item()
             f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred.argmax(dim=1).cpu().numpy(), average='weighted')

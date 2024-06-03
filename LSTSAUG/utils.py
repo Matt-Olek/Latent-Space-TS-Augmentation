@@ -18,3 +18,9 @@ def to_device(data, device):
 def to_default_device(data):
     """Move tensor(s) to default device"""
     return to_device(data, get_default_device())
+
+def custom_collate(batch, device):
+    if isinstance(batch[0], tuple):
+        return [(item[0].to(device, non_blocking=True), item[1].to(device, non_blocking=True)) for item in batch]
+    else:
+        return [item.to(device, non_blocking=True) for item in batch]

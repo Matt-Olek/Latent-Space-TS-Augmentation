@@ -10,55 +10,59 @@ from utils import to_default_device
 #---------------------------------- VAE Model ----------------------------------#
 
 class VAE(nn.Module):
-    def __init__(self, input_dim, latent_dim, num_classes):
+    def __init__(self, input_dim, num_classes, hidden_dim=1000, hidden_dim_classifier=10000, latent_dim=720):
         super(VAE, self).__init__()
         self.input_dim = input_dim
-        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
         self.num_classes = num_classes
 
         # Encoder layers
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, 256),
+            nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, latent_dim * 2)  # Output mean and log variance
         )
 
         # Decoder layers
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, input_dim),
-            nn.Sigmoid()  # Output in range [0, 1] for time series data
+            nn.Linear(latent_dim, input_dim),
+            nn.Sigmoid()
         )
+        
+        # Mean and log variance layers
+        
+        self.mean_layer = nn.Linear(hidden_dim, latent_dim)
+        self.log_var_layer = nn.Linear(hidden_dim, latent_dim)
 
         # Classifier layer
-        self.classifier = nn.Linear(latent_dim, num_classes)
+        self.classifier = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim_classifier),
+            nn.ReLU(),
+            nn.Linear(hidden_dim_classifier, num_classes)
+        )
+        self.beta = nn.Parameter(torch.tensor(0.1).float())
 
-        self.optimizer = optim.Adam(self.parameters(), lr=0.01)
+        self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.loss_function = nn.CrossEntropyLoss()
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=150)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=500)
 
-    def reparameterize(self, mu, log_var):
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn_like(std)
-        return mu + eps * std
+    def encode(self, x):
+        h = self.encoder(x)
+        return self.mean_layer(h), self.log_var_layer(h)
+    
+    def decode(self, z):
+        return self.decoder(z)
+    
+    def reparameterize(self, mean, var):
+        eps = torch.randn_like(var)
+        return mean + var * eps 
 
     def forward(self, x):
-        encoded = self.encoder(x)
-        mu, log_var = torch.chunk(encoded, 2, dim=1)
-        z = self.reparameterize(mu, log_var)
-        decoded = self.decoder(z)
+        mean, log_var = self.encode(x)
+        z = self.reparameterize(mean, log_var)
+        x_hat = self.decode(z)
         y_pred = self.classifier(z)
 
-        return decoded, mu, log_var, y_pred
+        return x_hat, mean, log_var, y_pred
 
     def train_epoch(self, data_loader):
         self.train()
@@ -68,13 +72,13 @@ class VAE(nn.Module):
         train_class_loss = 0
         for i, (batch, target) in enumerate(data_loader):
             self.optimizer.zero_grad()
-            x = to_default_device(batch)
-            target = to_default_device(target)
+            x = batch.to(next(self.parameters()).device)
+            target = target.to(next(self.parameters()).device)
             x_hat, mu, log_var, y_pred = self(x)
             recon_loss = nn.functional.mse_loss(x_hat, x, reduction='sum')
             kl_div = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-            class_loss = self.loss_function(y_pred.float(), target.argmax(dim=1))
-            loss = recon_loss + kl_div + class_loss
+            class_loss = self.loss_function(y_pred, target.argmax(dim=1))
+            loss = recon_loss + class_loss + kl_div
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
@@ -82,16 +86,13 @@ class VAE(nn.Module):
             train_kl_div += kl_div.item()
             train_class_loss += class_loss.item()
         self.scheduler.step(train_loss)
-        train_loss /= len(data_loader.dataset)
-        train_recon_loss /= len(data_loader.dataset)
-        train_kl_div /= len(data_loader.dataset)
         
         return train_loss, train_recon_loss, train_kl_div, train_class_loss
 
     def generate(self, num_samples):
         self.eval()
         with torch.no_grad():
-            z = torch.randn(num_samples, self.latent_dim)
+            z = torch.randn(num_samples, self.hidden_dim)
             return self.decoder(z).cpu().numpy()
         
     def validate(self, test_data):
@@ -114,5 +115,5 @@ class VAE(nn.Module):
             encoded = self.encoder(x)
             mu, log_var = torch.chunk(encoded, 2, dim=1)
             z = self.reparameterize(mu, log_var)
-            z = z.unsqueeze(1).expand(-1, num_samples, -1).reshape(-1, self.latent_dim)
+            z = z.unsqueeze(1).expand(-1, num_samples, -1).reshape(-1, self.hidden_dim)
             return self.decoder(z).cpu().numpy()

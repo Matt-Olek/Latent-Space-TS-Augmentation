@@ -45,10 +45,10 @@ class ResidualBlock(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 class Classifier_RESNET(nn.Module):
-    def __init__(self, input_shape, nb_classes):
+    def __init__(self, input_shape, nb_classes, lr=0.001, weight_decay=0.0001):
         super(Classifier_RESNET, self).__init__()
 
-        n_feature_maps = 100
+        n_feature_maps = 64
         self.conv1 = nn.Conv1d(1, n_feature_maps, kernel_size=8, padding=4)
         self.bn1 = nn.BatchNorm1d(n_feature_maps)
         self.relu = nn.ReLU()
@@ -62,8 +62,9 @@ class Classifier_RESNET(nn.Module):
         
         self.initialize_weights()
         
-        self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        self.criterion = nn.BCEWithLogitsLoss()
+        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=lr, weight_decay=weight_decay)
+
 
     def forward(self, x):
         out = self.conv1(x)                                     # Convolution 1
@@ -104,7 +105,7 @@ class Classifier_RESNET(nn.Module):
             acc = torch.sum(torch.argmax(output, dim=1) == torch.argmax(y, dim=1))
             
             train_loss += loss.item()
-            correct += acc
+            correct += acc.item()
             total += len(y)
         epoch_loss = train_loss / total
         epoch_acc = correct / total
@@ -118,6 +119,6 @@ class Classifier_RESNET(nn.Module):
             x = to_default_device(x)
             y = to_default_device(y)
             y_pred = self(x)
-            accuracy = (y_pred.argmax(dim=1) == y.argmax(dim=1)).float().mean().item()
+            accuracy = torch.sum(torch.argmax(y_pred, dim=1) == torch.argmax(y, dim=1)).item() / len(y)
             f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred.argmax(dim=1).cpu().numpy(), average='weighted')
             return accuracy, f1

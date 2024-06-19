@@ -10,7 +10,7 @@ from utils import to_default_device
 #---------------------------------- VAE Model ----------------------------------#
 
 class VAE(nn.Module):
-    def __init__(self, input_dim, num_classes, hidden_dim=1000, hidden_dim_classifier=10000, latent_dim=720):
+    def __init__(self, input_dim, num_classes, hidden_dim=10000, hidden_dim_classifier=1000, latent_dim=720):
         super(VAE, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -43,7 +43,7 @@ class VAE(nn.Module):
 
         self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
         self.loss_function = nn.CrossEntropyLoss()
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=500)
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=1000)
 
     def encode(self, x):
         h = self.encoder(x)

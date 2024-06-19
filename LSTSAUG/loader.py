@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import tsaug
+import pyro 
+import pyro.distributions as dist
+
 
 #---------------------------------- Data Loader ----------------------------------#
 
@@ -22,14 +25,23 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
     nb_classes = len(train_data[0].unique())
     min_class = train_data[0].min()
 
-    if min_class != 0:  # Re-index classes
+    if min_class == 0:
+        pass
+    elif min_class > 0:
         train_data[0] = train_data[0] - min_class
         test_data[0] = test_data[0] - min_class
+    elif min_class == -1 :
+        train_data[0] = train_data[0].replace(-1, 0).replace(1, 1)
+        test_data[0] = test_data[0].replace(-1, 0).replace(1, 1)
 
+    print('Building loader for dataset : {}'.format(dataset_name))
     print('Number of detected classes : {}'.format(nb_classes))
+    print('Classes : {}'.format(train_data[0].unique()))
     print('Number of detected samples in the training set : {}'.format(len(train_data)))
     print('Number of detected samples in the test set : {}'.format(len(test_data)))
 
+    batch_size = max(batch_size, len(train_data)//10)
+    print('Batch size : {}'.format(batch_size))
     train_np = train_data.to_numpy()
     test_np = test_data.to_numpy()
     train = train_np.reshape(np.shape(train_np)[0], 1, np.shape(train_np)[1])
@@ -42,13 +54,14 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
 
     # Scale data to [0, 1]
     scaler = MinMaxScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    # X_train = scaler.fit_transform(X_train)
+    # X_test = scaler.transform(X_test)
 
     X_train = torch.tensor(X_train, dtype=torch.float32)
     X_test = torch.tensor(X_test, dtype=torch.float32)
     y_train = torch.tensor(y_train, dtype=torch.int64)
     y_test = torch.tensor(y_test, dtype=torch.int64)
+
 
     # One-hot encoding of the class labels
     y_train = torch.nn.functional.one_hot(y_train, num_classes=nb_classes)
@@ -63,11 +76,14 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
 
     return train_loader, test_dataset, nb_classes, scaler
 
-def augment_loader(data_loader, model, num_samples, distance=1, scaler=None,num_classes=6):
-    '''
+def augment_loader(data_loader, model, num_samples, distance=1, scaler=None, num_classes=6, alpha=1):
+    """
     Generate new samples by sampling from the neighborhood of the input samples in the latent space. Returns a data loader.
-    '''
+    """
     batch_size = data_loader.batch_size
+    sample_dim = data_loader.dataset[0][0].shape[0]
+    print('Sample dimension:', sample_dim)
+    alpha_increment = 0.01
     X_list = []
     y_list = []
 
@@ -83,114 +99,115 @@ def augment_loader(data_loader, model, num_samples, distance=1, scaler=None,num_
     X = to_default_device(X)
     y = to_default_device(y)
     model.eval()
+
+    # Compute latent space representations for all samples
     with torch.no_grad():
-      for class_idx in range(num_classes):
-            class_samples = X[y.argmax(dim=1) == class_idx]
-            if len(class_samples) == 0:
-                continue
-            else :
-                neighbors = []
-                for neighbor_idx in range(num_samples):
-                    idx = np.random.randint(len(class_samples))
-                    x = class_samples[idx].unsqueeze(0)
-                    
-                    mu, log_var = model.encode(x)
-                    z = model.reparameterize(mu, log_var)
-                    
-                    neighbors.append(z)
-                neighbors = torch.cat(neighbors, dim=0)
-                X_aug = model.decode(neighbors)
-                y_aug = torch.nn.functional.one_hot(torch.tensor([class_idx]*len(neighbors)), num_classes=num_classes)
-                if class_idx == 0:
-                    X_aug_list = X_aug
-                    y_aug_list = y_aug
-                else:
-                    X_aug_list = torch.cat((X_aug_list, X_aug), dim=0)
-                    y_aug_list = torch.cat((y_aug_list, y_aug), dim=0)
-    X_aug = X_aug_list
-    y_aug = y_aug_list
-    
-    # To default device
+        mu, log_var = model.encode(X)
+        z = model.reparameterize(mu, log_var)
+
+    # Initialize Gaussian Mixture Models for each class using mu and log_var
+    gmms = []
+    for class_idx in range(num_classes):
+        class_indices = (y.argmax(dim=1) == class_idx).nonzero(as_tuple=True)[0].cpu().numpy()
+        class_mu = mu[class_indices].cpu().numpy().squeeze()
+        class_var = torch.exp(log_var[class_indices])
+        class_covar = [torch.diag(class_var[i]) * alpha for i in range(len(class_indices))]
+        class_covar = torch.stack(class_covar).cpu().numpy()
+        class_covar_tensor = torch.tensor(class_covar)
+        class_mu_tensor = torch.tensor(class_mu)
+
+        mgm = dist.MixtureSameFamily(
+            dist.Categorical(torch.ones(len(class_indices))/len(class_indices)),
+            dist.MultivariateNormal(class_mu_tensor, class_covar_tensor)
+        )
+        gmms.append(mgm)
+
+    X_aug_list = []
+    y_aug_list = []
+    real_size_of_samples = 0
+    alpha_update = False
+
+    while not alpha_update:
+        print('Trying alpha = {}'.format(alpha))
+        X_aug_list = []
+        y_aug_list = []
+        real_size_of_samples = 0
+        with torch.no_grad():
+            for class_idx in range(num_classes):
+                print('Class', class_idx)
+                z_samples = gmms[class_idx].sample([num_samples])
+                real_log_dens = gmms[class_idx].log_prob(z_samples)
+                kept_z_samples = z_samples
+                for other_class_idx in range(num_classes):
+                    if kept_z_samples.shape[0] == 0:
+                        break
+                    if other_class_idx == class_idx:
+                        continue
+                    else:
+                        log_dens_prob_of_other_class = gmms[other_class_idx].log_prob(kept_z_samples)
+
+                        # prob = real_log_dens - torch.log(torch.tensor(1) + torch.exp(log_dens_prob_of_other_class - real_log_dens))
+                        should_be_kept = log_dens_prob_of_other_class < real_log_dens
+                        kept_z_samples = kept_z_samples[should_be_kept]
+                        print('Kept {} samples'.format(len(kept_z_samples)), 'out of', len(z_samples))
+                        real_log_dens = real_log_dens[should_be_kept]
+
+                z_samples = kept_z_samples
+
+                if len(z_samples) > 0:
+                    # Did not drop all samples
+                    z_tensors = torch.tensor(z_samples, device=X.device, dtype=torch.float32)
+                    x_augs = model.decode(z_tensors)
+                    y_aug = torch.nn.functional.one_hot(torch.tensor([class_idx]*len(z_tensors)), num_classes=num_classes)
+                    X_aug_list.append(x_augs)
+                    y_aug_list.append(y_aug)
+                    real_size_of_samples += len(z_samples)
+
+                    if z_samples.shape[0] < num_samples:
+                        alpha_update = True
+                        print('Dropped {} samples'.format(num_samples - len(z_samples)))
+                    else:
+                        alpha_update = True
+                else :
+                    alpha_update = True
+                    print('Dropped {} samples'.format(num_samples))
+
+        # If no samples were dropped, increment alpha and try again
+        if not alpha_update:
+            print('No samples dropped')
+            alpha += alpha_increment
+            gmms = []
+            for class_idx in range(num_classes):
+                class_indices = (y.argmax(dim=1) == class_idx).nonzero(as_tuple=True)[0]
+                class_mu = mu[class_indices].cpu().numpy().squeeze()
+                class_var = torch.exp(log_var[class_indices]).cpu().numpy()
+                class_covar = [torch.diag(torch.exp(log_var[class_indices][i])) * alpha for i in range(len(class_indices))]
+                class_covar = torch.stack(class_covar).cpu().numpy()
+                class_covar_tensor = torch.tensor(class_covar)
+                class_mu_tensor = torch.tensor(class_mu)
+
+                mgm = dist.MixtureSameFamily(
+                    dist.Categorical(torch.ones(len(class_indices))),
+                    dist.MultivariateNormal(class_mu_tensor, class_covar_tensor)
+                )
+                gmms.append(mgm)
+
+    if X_aug_list:
+        X_aug = torch.cat(X_aug_list, dim=0)
+        y_aug = torch.cat(y_aug_list, dim=0)
+    else:
+        X_aug = torch.tensor([]).to(X.device)
+        y_aug = torch.tensor([]).to(X.device)
+
     X_aug = to_default_device(X_aug)
     y_aug = to_default_device(y_aug)
-    print(X.shape)
-    print(y.shape)
-    
-    print(X_aug.shape)
-    print(y_aug.shape)
-    
-    batch_size = int(batch_size * (1 + num_samples))
-    
-    augment_loader = DataLoader(
-        TensorDataset(torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)),
-        batch_size=batch_size,
-        shuffle=True   
-    )
-    
-    return augment_loader
-
-def augment_loader_old(data_loader, model, num_samples, distance=1, sample_idx=None, scaler=None,num_classes=6):
-    '''
-    Generate new samples by sampling from the neighborhood of the input samples in the latent space. Returns a data loader.
-    '''
-    batch_size = data_loader.batch_size
-    X_list = []
-    y_list = []
-
-    # Iterate through the entire data loader and accumulate the batches
-    for X_batch, y_batch in data_loader:
-        X_list.append(X_batch)
-        y_list.append(y_batch)
-
-    # Concatenate all the accumulated batches
-    X = torch.cat(X_list, dim=0)
-    y = torch.cat(y_list, dim=0)
-
-    X = to_default_device(X)
-    y = to_default_device(y)
-    model.eval()
-    with torch.no_grad():
-        if sample_idx is None:
-            mu, log_var = model.encode(X)
-            Z = model.reparameterize(mu, log_var)
-            X_aug_list = []
-            for i in range(num_samples):
-                noise = torch.randn(1, Z.shape[1]) * distance
-                noise = to_default_device(noise)
-                X_aug = model.decode(Z + noise)
-                X_aug_list.append(X_aug)
-            X_aug = torch.cat(X_aug_list, dim=0)
-            y_aug = y.unsqueeze(1).repeat(1, num_samples, 1).view(-1, y.shape[1])
-                    
-        else:
-            mu, log_var = model.encode(X[sample_idx])
-            Z = model.reparameterize(mu, log_var)
-            X_aug_list = []
-            for i in range(num_samples):
-                noise = torch.randn_like(Z) * distance
-                noise = to_default_device(noise)
-                X_aug = model.decode(Z + noise)
-                X_aug_list.append(X_aug)
-            X_aug = torch.cat(X_aug_list, dim=0)
-            y_aug = y[sample_idx].unsqueeze(1).repeat(1, num_samples, 1).view(-1, y.shape[1])
-
-    # Scale the augmented data using the same scaler
-    if scaler is not None:
-        X_aug_np = X_aug.cpu().numpy()  # Convert to numpy for scaling
-        X_aug_np = scaler.transform(X_aug_np)  # Apply the scaler
-        X_aug = torch.tensor(X_aug_np, dtype=torch.float32)
-        X_aug = to_default_device(X_aug)
-
-    if sample_idx is not None:
-        batch_size = int(batch_size * (1 + len(sample_idx) / len(X)))
-    else:
-        batch_size = int(batch_size * (1 + num_samples))
 
     augment_loader = DataLoader(
         TensorDataset(torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)),
         batch_size=batch_size,
         shuffle=True
     )
+
     return augment_loader
 
 def to_default_device(data):

@@ -64,6 +64,7 @@ class Classifier_RESNET(nn.Module):
         
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=lr, weight_decay=weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=250 , verbose=True)
 
 
     def forward(self, x):
@@ -108,6 +109,7 @@ class Classifier_RESNET(nn.Module):
             correct += acc.item()
             total += len(y)
         epoch_loss = train_loss / total
+        self.scheduler.step(epoch_loss)
         epoch_acc = correct / total
         return epoch_loss, epoch_acc
     

@@ -6,29 +6,40 @@ import torch
 import tqdm
 import numpy as np
 from VAE import VAE
-from visualization import plot_latent_space_neighbors
+from visualization import plot_latent_space_neighbors, plot_latent_space_viz
 from ClassifierModel import Classifier_RESNET
 from loader import getUCRLoader, augment_loader
 from utils import to_default_device
-from config import config
+from config import config # Config file
 import csv
 
 #---------------------------------- Main ----------------------------------#
 
 def main(config=config):
+    # Configurations
+    logs = {}
     torch.manual_seed(config["SEED"])
-    
     os.makedirs(config["MODEL_DIR"], exist_ok=True)
     os.makedirs(config["RESULTS_DIR"], exist_ok=True)
+    
+    # Building the loader fron the UCR dataset
     train_loader, test_dataset, nb_classes, scaler = getUCRLoader(config["DATA_DIR"], config["DATASET"], config["BATCH_SIZE"])
     
     input_dim = train_loader.dataset[0][0].shape[0]
     print("Detected input dimension: ", input_dim)
-    vae = to_default_device(VAE(input_dim, nb_classes, latent_dim=input_dim, hidden_dim=10000, hidden_dim_classifier=1000))
+    
+    # Building the VAE model
+    vae = to_default_device(VAE(
+        input_dim, 
+        nb_classes, 
+        latent_dim=config['LATENT_DIM'],
+        learning_rate=config['VAE_LEARNING_RATE'], 
+        hidden_dim=10000, 
+        hidden_dim_classifier=1000))
     
     num_samples = int(len(train_loader.dataset)/nb_classes)*config["NUM_SAMPLES"]
     print("Number of samples produced per class: ", num_samples)
-    logs = {}
+    
     logs['dataset'] = config["DATASET"]
     logs['num_classes'] = nb_classes
     logs['num_train_samples'] = len(train_loader.dataset)
@@ -39,17 +50,15 @@ def main(config=config):
 
     if not config["USE_TRAINED"] or not os.path.exists(model_path):
         if config["WANDB"]:
-            wandb.init(project='lstsaug_no_val',
+            wandb.init(project=config["WANDB_PROJECT"],
                         config=config,
-                        tags=['vae'],
-                        name=f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e')
+                        tags=['vae', 'train',config["DATASET"]],
+                        name=f'{config["DATASET"]}_vae')
             wandb.watch(vae)
-        
-        # Train 
-        print('#'*50)
-        print('Training the VAE model...')
+            
+        print('#'*50 + '\n' +'Training the VAE model...')
         for epoch in tqdm.tqdm(range(config["VAE_NUM_EPOCHS"])):
-            train_loss, train_recon_loss, train_kl_div, train_class_loss = vae.train_epoch(train_loader)
+            train_loss, train_recon_loss, train_kl_div, train_class_loss,train_dispersion_loss, train_overlap_loss = vae.train_epoch(train_loader)
             
             # Test the model
             acc, f1 = vae.validate(test_dataset)
@@ -58,9 +67,14 @@ def main(config=config):
                             'train_recon_loss': train_recon_loss,
                             'train_kl_div': train_kl_div,
                             'train_class_loss': train_class_loss,
+                            'train_dispersion_loss': train_dispersion_loss,
+                            'train_overlap_loss': train_overlap_loss,
                             'lr': float(vae.scheduler.get_last_lr()[0]),
                             'test_accuracy': acc,
                             'test_f1': f1})
+            if epoch % 50 == 0 and config["AUGMENT_PLOT"]:
+                plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=nb_classes)
+                plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=config["NOISE"], num_classes=nb_classes)
                 
         # Save the trained model
         model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
@@ -74,25 +88,14 @@ def main(config=config):
         model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
         vae.load_state_dict(torch.load(model_path))
         vae.eval()
-        
-    # ---------------------------- VAE Testing ---------------------------- #
-    
-    if config["AUGMENT_PLOT"]:
-        print('#'*50)
-        print('Plotting the augmented data points...')
-        # Load the trained model
-        model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
-        vae.load_state_dict(torch.load(model_path))
-        vae.eval()
-        
-        plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=config["NOISE"], num_classes=nb_classes)
+        print(f'Model loaded from {model_path}')
         
     # ---------------------------- Classifier Training ---------------------------- #
     
     if config["TEST_AUGMENT"]:
         # Baseline classifier training
         if config["BASELINE"]:
-            classifier = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
+            classifier = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["CLASSIFIER_LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
             if config["WANDB"]:
                 wandb.init(project='lstsaug_no_val',
                             config=config,
@@ -101,7 +104,7 @@ def main(config=config):
                 wandb.watch(classifier)
             print('#'*50)
             print('Training the classifier model and testing on the validation dataset...')
-            best_acc = 0
+            best_acc = 0    
             best_f1 = 0
             for epoch in tqdm.tqdm(range(config["NUM_EPOCHS"])):
                 train_loss, train_acc = classifier.train_epoch(train_loader)
@@ -136,7 +139,7 @@ def main(config=config):
         # augmented_loader = tw_loader(train_loader, config["NUM_SAMPLES"])
         
         # Train the classifier on the augmented dataset
-        classifier_augmented = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
+        classifier_augmented = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["CLASSIFIER_LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
         if config["WANDB"]:
             wandb.init(project='lstsaug_no_val',
                         config=config,
@@ -187,14 +190,15 @@ def main(config=config):
         writer.writerow(logs.values())
             
 if __name__ == '__main__':
-    datasets_names = open('datasets_names.txt', 'r').read().split('\n')
-    for dataset_name in datasets_names:
-        for i in range(3):
-            if i == 0:
-                config["WANDB"] = True
-            else:
-                config["WANDB"] = False
-            config["SEED"] = i
-            config["DATASET"] = dataset_name
-            main(config)
-            print(f'{dataset_name} done!')
+    main(config=config)
+    # datasets_names = open('datasets_names.txt', 'r').read().split('\n')
+    # for dataset_name in datasets_names:
+    #     for i in range(3):
+    #         if i == 0:
+    #             config["WANDB"] = True
+    #         else:
+    #             config["WANDB"] = False
+    #         config["SEED"] = i
+    #         config["DATASET"] = dataset_name
+    #         main(config)
+    #         print(f'{dataset_name} done!')

@@ -1,34 +1,36 @@
 config = {
     
-    # ---------------- DATA ---------------- #
+    # ---------------- DATA PARAMETERS---------------- #
     
     "DATA_DIR": '../../FastAutoAugment-Time-Series/data',
     "RESULTS_DIR": 'results',
     "MODEL_DIR": 'models',
-    "DATASET": 'HandOutlines',
+    "DATASET": 'ChlorineConcentration',
     
-    # ---------------- MODEL ---------------- #
+    # ---------------- MODEL PARAMETERS ---------------- #
     
     "SEED": 423,
-    "VAE_NUM_EPOCHS": 2000,
+    "VAE_NUM_EPOCHS": 1500,
     "NUM_EPOCHS": 3000,
     "BATCH_SIZE": 8,
-    "LATENT_DIM": 500,
-    "LEARNING_RATE": 0.0001,
+    "LATENT_DIM": 4,
+    "LEARNING_RATE": 0.00001,
+    "CLASSIFIER_LEARNING_RATE": 0.00001,
+    "VAE_LEARNING_RATE": 1e-3,
     "WEIGHT_DECAY": 0.000001,
     
-    # ---------------- AUGMENTATION ---------------- #
+    # ---------------- AUGMENTATION PARAMETERS ---------------- #
     
-    "AUGMENT_PLOT": False,
+    "AUGMENT_PLOT": True,
     "TEST_AUGMENT": True,
-    "USE_TRAINED": True,
-    "BASELINE": False,
+    "USE_TRAINED": False,
+    "BASELINE": True,
     "NUM_SAMPLES": 1,
     "NOISE": 0.01,
-    "ALPHA": 0.0001,
-    "INCREMENTAL_AUG": False,
+    "ALPHA": 1,
     
-    # ---------------- WANDB ---------------- #
+    # ---------------- WANDB PARAMETERS ---------------- #
     
-    "WANDB": False,  
+    "WANDB": True,  
+    "WANDB_PROJECT": 'lstsaug_2.0',
 }

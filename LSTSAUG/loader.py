@@ -52,10 +52,13 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
     X_train = train[:, 0, 1:]
     X_test = test[:, 0, 1:]
 
-    # Scale data to [0, 1]
-    scaler = MinMaxScaler()
-    # X_train = scaler.fit_transform(X_train)
-    # X_test = scaler.transform(X_test)
+    # Scale data to [-1;1]
+    
+    scaler = MinMaxScaler(feature_range=(-1, 1))
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    
 
     X_train = torch.tensor(X_train, dtype=torch.float32)
     X_test = torch.tensor(X_test, dtype=torch.float32)

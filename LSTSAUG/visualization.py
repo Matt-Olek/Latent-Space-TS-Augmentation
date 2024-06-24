@@ -58,7 +58,7 @@ def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=1, 
     plt.savefig('results/latent_space_neighbors.png')
     plt.close()
 
-def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6):
+def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6, type='3d'):
     '''
     Plot the latent space representation of the test dataset by classes on different dimensions.
     '''
@@ -84,41 +84,70 @@ def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6):
     X_test = to_default_device(X_test)
     y_test = to_default_device(y_test)
     
-    fig, axes = plt.subplots(1, 3, figsize=(30, 10))
-    
     colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'black', 'lime', 'teal', 'aqua', 'navy', 'maroon', 'silver', 'gold'] * 10
-    for class_idx in range(num_classes):
-        class_samples_train = X_train[y_train.argmax(dim=1) == class_idx]
-        class_samples_test = X_test[y_test.argmax(dim=1) == class_idx]
-        if len(class_samples_train) == 0 and len(class_samples_test) == 0:
-            continue
-        # Compute the mean and variance of the latent space for the current class
-        with torch.no_grad():
-            mu_train, log_var_train = vae.encode(class_samples_train)
-            z_train = vae.reparameterize(mu_train, log_var_train)
+    
+    if type == '2d':
+        
+        fig, axes = plt.subplots(1, 3, figsize=(30, 10))
+        
+        for class_idx in range(num_classes):
+            class_samples_train = X_train[y_train.argmax(dim=1) == class_idx]
+            class_samples_test = X_test[y_test.argmax(dim=1) == class_idx]
+            if len(class_samples_train) == 0 and len(class_samples_test) == 0:
+                continue
+            # Compute the mean and variance of the latent space for the current class
+            with torch.no_grad():
+                mu_train, log_var_train = vae.encode(class_samples_train)
+                z_train = vae.reparameterize(mu_train, log_var_train)
+                
+                mu_test, log_var_test = vae.encode(class_samples_test)
+                z_test = vae.reparameterize(mu_test, log_var_test)
             
-            mu_test, log_var_test = vae.encode(class_samples_test)
-            z_test = vae.reparameterize(mu_test, log_var_test)
+            # Convert tensors to numpy for plotting
+            z_train = z_train.cpu().numpy()
+            z_test = z_test.cpu().numpy()
+            
+            # Plot the latent space representation of the current class
+            ax = axes[0]
+            ax.scatter(z_train[:, 0], z_train[:, 1], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
+            ax.scatter(z_test[:, 0], z_test[:, 1], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
+            ax.set_title('Latent Space Visualization (Dim 0 vs Dim 1)')
+            
+            ax = axes[1]
+            ax.scatter(z_train[:, 1], z_train[:, 2], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
+            ax.scatter(z_test[:, 1], z_test[:, 2], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
+            ax.set_title('Latent Space Visualization (Dim 1 vs Dim 2)')
+            
+            ax = axes[2]
+            ax.scatter(z_train[:, 2], z_train[:, 3], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
+            ax.scatter(z_test[:, 2], z_test[:, 3], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
+            ax.set_title('Latent Space Visualization (Dim 2 vs Dim 3)')
+    
+    elif type == '3d':
+        fig = plt.figure(figsize=(15, 15))
+        ax = fig.add_subplot(111, projection='3d')
         
-        # Convert tensors to numpy for plotting
-        z_train = z_train.cpu().numpy()
-        z_test = z_test.cpu().numpy()
-        
-        # Plot the latent space representation of the current class
-        ax = axes[0]
-        ax.scatter(z_train[:, 0], z_train[:, 1], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
-        ax.scatter(z_test[:, 0], z_test[:, 1], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
-        ax.set_title('Latent Space Visualization (Dim 0 vs Dim 1)')
-        
-        ax = axes[1]
-        ax.scatter(z_train[:, 1], z_train[:, 2], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
-        ax.scatter(z_test[:, 1], z_test[:, 2], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
-        ax.set_title('Latent Space Visualization (Dim 1 vs Dim 2)')
-        
-        ax = axes[2]
-        ax.scatter(z_train[:, 2], z_train[:, 3], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
-        ax.scatter(z_test[:, 2], z_test[:, 3], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
-        ax.set_title('Latent Space Visualization (Dim 2 vs Dim 3)')
+        for class_idx in range(num_classes):
+            class_samples_train = X_train[y_train.argmax(dim=1) == class_idx]
+            class_samples_test = X_test[y_test.argmax(dim=1) == class_idx]
+            if len(class_samples_train) == 0 and len(class_samples_test) == 0:
+                continue
+            # Compute the mean and variance of the latent space for the current class
+            with torch.no_grad():
+                mu_train, log_var_train = vae.encode(class_samples_train)
+                z_train = vae.reparameterize(mu_train, log_var_train)
+                
+                mu_test, log_var_test = vae.encode(class_samples_test)
+                z_test = vae.reparameterize(mu_test, log_var_test)
+            
+            # Convert tensors to numpy for plotting
+            z_train = z_train.cpu().numpy()
+            z_test = z_test.cpu().numpy()
+            
+            # Plot the latent space representation of the current class
+            ax.scatter(z_train[:, 0], z_train[:, 1], z_train[:, 2], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
+            ax.scatter(z_test[:, 0], z_test[:, 1], z_test[:, 2], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
+            ax.set_title('Latent Space Visualization (Dim 0 vs Dim 1 vs Dim 2)')
     
     plt.tight_layout()
     plt.savefig('results/latent_space_viz.png')

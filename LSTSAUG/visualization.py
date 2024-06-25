@@ -1,4 +1,6 @@
+import os 
 import torch
+from PIL import Image
 import numpy as np
 from utils import to_default_device
 import matplotlib.pyplot as plt
@@ -58,7 +60,7 @@ def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=1, 
     plt.savefig('results/latent_space_neighbors.png')
     plt.close()
 
-def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6, type='3d'):
+def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6, type='3d', id=0):
     '''
     Plot the latent space representation of the test dataset by classes on different dimensions.
     '''
@@ -136,6 +138,8 @@ def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6, type='
             with torch.no_grad():
                 mu_train, log_var_train = vae.encode(class_samples_train)
                 z_train = vae.reparameterize(mu_train, log_var_train)
+                # mu_train_mean = mu_train.mean(dim=0)
+                # print(f"Class {class_idx} Train Mean: {mu_train_mean}")
                 
                 mu_test, log_var_test = vae.encode(class_samples_test)
                 z_test = vae.reparameterize(mu_test, log_var_test)
@@ -148,8 +152,28 @@ def plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=6, type='
             ax.scatter(z_train[:, 0], z_train[:, 1], z_train[:, 2], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
             ax.scatter(z_test[:, 0], z_test[:, 1], z_test[:, 2], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
             ax.set_title('Latent Space Visualization (Dim 0 vs Dim 1 vs Dim 2)')
+            ax.set_xlim([-0.3, 0.3])
+            ax.set_ylim([-0.3, 0.3])
+            ax.set_zlim([-0.3, 0.3])
+            angle_x = 30
+            angle_y = id*4
+            ax.view_init(angle_x, angle_y)
     
     plt.tight_layout()
-    plt.savefig('results/latent_space_viz.png')
+    plt.savefig('results/visualization/latent_space_viz.png')
+    plt.savefig('results/visualization/gif/viz_{}.png'.format(id))
     # print('Saved latent space visualization to results/latent_space_viz.png')
     plt.close()
+    
+def build_gif(folder_path='results/visualization/gif', output_path='results/visualization/latent_space_viz.gif', duration=200):
+    images = [img for img in os.listdir(folder_path) if img.endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
+    
+    # # Sort images to maintain order
+    # images.sort()
+    
+    # Load images into a list
+    frames = [Image.open(os.path.join(folder_path, image)) for image in images]
+    
+    # Save as GIF
+    if frames:
+        frames[0].save(output_path, format='GIF', append_images=frames[1:], save_all=True, duration=duration, loop=0)

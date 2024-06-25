@@ -5,18 +5,18 @@ config = {
     "DATA_DIR": '../../FastAutoAugment-Time-Series/data',
     "RESULTS_DIR": 'results',
     "MODEL_DIR": 'models',
-    "DATASET": 'ChlorineConcentration',
+    "DATASET": 'Adiac',
     
     # ---------------- MODEL PARAMETERS ---------------- #
     
     "SEED": 423,
-    "VAE_NUM_EPOCHS": 1500,
+    "VAE_NUM_EPOCHS": 300,
     "NUM_EPOCHS": 3000,
     "BATCH_SIZE": 8,
     "LATENT_DIM": 4,
     "LEARNING_RATE": 0.00001,
     "CLASSIFIER_LEARNING_RATE": 0.00001,
-    "VAE_LEARNING_RATE": 1e-3,
+    "VAE_LEARNING_RATE": 1e-4,
     "WEIGHT_DECAY": 0.000001,
     
     # ---------------- AUGMENTATION PARAMETERS ---------------- #

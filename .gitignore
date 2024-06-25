@@ -160,5 +160,6 @@ cython_debug/
 #.idea/
 
 data/
+results/visualization/gif/
 models/
 wandb/

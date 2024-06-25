@@ -6,11 +6,11 @@ import torch
 import tqdm
 import numpy as np
 from VAE import VAE
-from visualization import plot_latent_space_neighbors, plot_latent_space_viz
+from visualization import plot_latent_space_neighbors, plot_latent_space_viz,build_gif
 from ClassifierModel import Classifier_RESNET
 from loader import getUCRLoader, augment_loader
 from utils import to_default_device
-from config import config # Config file
+from config import config
 import csv
 
 #---------------------------------- Main ----------------------------------#
@@ -35,7 +35,7 @@ def main(config=config):
         latent_dim=config['LATENT_DIM'],
         learning_rate=config['VAE_LEARNING_RATE'], 
         hidden_dim=10000, 
-        hidden_dim_classifier=1000))
+    ))
     
     num_samples = int(len(train_loader.dataset)/nb_classes)*config["NUM_SAMPLES"]
     print("Number of samples produced per class: ", num_samples)
@@ -57,29 +57,38 @@ def main(config=config):
             wandb.watch(vae)
             
         print('#'*50 + '\n' +'Training the VAE model...')
+        best_acc = 0
+        best_f1 = 0
         for epoch in tqdm.tqdm(range(config["VAE_NUM_EPOCHS"])):
-            train_loss, train_recon_loss, train_kl_div, train_class_loss,train_dispersion_loss, train_overlap_loss = vae.train_epoch(train_loader)
+            train_train_loss, train_recon_loss, train_kl_div, train_class_loss, train_fischer_loss,_ = vae.train_epoch(train_loader)
             
             # Test the model
             acc, f1 = vae.validate(test_dataset)
             if config["WANDB"]:
-                wandb.log({ 'train_loss': train_loss,
+                wandb.log({ 'train_loss': train_train_loss,
                             'train_recon_loss': train_recon_loss,
                             'train_kl_div': train_kl_div,
                             'train_class_loss': train_class_loss,
-                            'train_dispersion_loss': train_dispersion_loss,
-                            'train_overlap_loss': train_overlap_loss,
+                            'train_fischer_loss': train_fischer_loss,
                             'lr': float(vae.scheduler.get_last_lr()[0]),
                             'test_accuracy': acc,
                             'test_f1': f1})
-            if epoch % 50 == 0 and config["AUGMENT_PLOT"]:
-                plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=nb_classes)
-                plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=config["NOISE"], num_classes=nb_classes)
+            if epoch % 1 == 0 and config["AUGMENT_PLOT"]:
+                plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=nb_classes, type='3d', id=epoch)
+                # plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=config["NOISE"], num_classes=nb_classes)
+                
+            if acc > best_acc:
+                best_acc = acc
+                best_f1 = f1
+        print('Best test accuracy:', best_acc)
                 
         # Save the trained model
         model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
         torch.save(vae.state_dict(), model_path)
         print(f'Model saved at {model_path}')  
+        # Build Gif
+        build_gif()
+        
         
         if config["WANDB"]:
             wandb.finish()
@@ -191,6 +200,9 @@ def main(config=config):
             
 if __name__ == '__main__':
     main(config=config)
+    
+    # build_gif()
+    
     # datasets_names = open('datasets_names.txt', 'r').read().split('\n')
     # for dataset_name in datasets_names:
     #     for i in range(3):

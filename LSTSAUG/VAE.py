@@ -191,7 +191,7 @@ class VAE(nn.Module):
             x_hat, mu, log_var, _ = self(x)
             y_pred = self.knn.predict(mu.detach().cpu().numpy())
             accuracy = (y_pred == y.argmax(dim=1).cpu().numpy()).mean()
-            f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred, average='macro')
+            f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred, average='weighted')
             return accuracy, f1
     
     def augment(self, x, num_samples):

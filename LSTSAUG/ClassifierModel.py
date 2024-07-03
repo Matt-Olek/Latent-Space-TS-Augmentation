@@ -1,4 +1,5 @@
-import torch 
+import torch
+import wandb 
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
@@ -124,3 +125,20 @@ class Classifier_RESNET(nn.Module):
             accuracy = torch.sum(torch.argmax(y_pred, dim=1) == torch.argmax(y, dim=1)).item() / len(y)
             f1 = f1_score(y.argmax(dim=1).cpu().numpy(), y_pred.argmax(dim=1).cpu().numpy(), average='weighted')
             return accuracy, f1
+        
+    def train_classifier(self, train_loader, test_data, config, logs, name='classifier'):
+        if config["WANDB"]:
+            wandb.init(project=config["WANDB_PROJECT"],
+                        config=config,
+                        tags=['train',config["DATASET"], name],
+                        name=f'{config["DATASET"]} {name}')     
+            wandb.watch(self)
+        for epoch in range(config["NUM_EPOCHS"]):
+            train_loss, train_acc = self.train_epoch(train_loader)
+            test_acc, test_f1 = self.validate(test_data)
+            print(f'Epoch: {epoch} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f} | Test F1: {test_f1:.4f}')
+            if config["WANDB"]:
+                wandb.log({'train_loss': train_loss, 'train_acc': train_acc, 'test_acc': test_acc, 'test_f1': test_f1})
+        logs['classifier_best_acc'] = test_acc
+        logs['classifier_best_f1'] = test_f1
+        return self, logs

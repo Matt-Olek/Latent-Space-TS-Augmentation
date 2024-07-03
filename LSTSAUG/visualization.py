@@ -3,11 +3,57 @@ import torch
 from PIL import Image
 import numpy as np
 from utils import to_default_device
+from loader import augment_loader
 import matplotlib.pyplot as plt
 
 #---------------------------------- Plotting ----------------------------------#
 
-def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=1, num_classes=6):
+def plot_latent_space_neighbors(vae, data_loader, num_neighbors=5, alpha=1, num_classes=6):
+    
+    augmented_loader = augment_loader(data_loader, vae, num_neighbors*10, num_classes = num_classes, alpha = alpha, return_augmented_only=True)
+
+    fig, axes = plt.subplots(num_classes, 1, figsize=(10, 4 * num_classes))
+    
+    X_ground_truth = []
+    y_ground_truth = []
+    X_augmented = []
+    y_augmented = []
+    
+    for X, y in data_loader:
+        X_ground_truth.append(X)
+        y_ground_truth.append(y)
+    for X, y in augmented_loader:
+        X_augmented.append(X)
+        y_augmented.append(y)
+        
+    X_ground_truth = torch.cat(X_ground_truth, dim=0)
+    y_ground_truth = torch.cat(y_ground_truth, dim=0)
+    
+    X_augmented = torch.cat(X_augmented, dim=0)
+    y_augmented = torch.cat(y_augmented, dim=0)
+    
+    for class_idx in range(num_classes):
+        class_ground_truth = X_ground_truth[y_ground_truth.argmax(dim=1) == class_idx]
+        class_augmented = X_augmented[y_augmented.argmax(dim=1) == class_idx]
+        
+        # plot 5 samples from the class or less if there are less than 5
+        num_true_samples = len(class_ground_truth)
+        num_augmented_samples = len(class_augmented)
+        num_samples = min(num_true_samples, num_augmented_samples, 5)
+        if num_samples == 0:
+            continue
+        for i in range(num_samples):
+            ax = axes[class_idx]
+            ax.plot(class_ground_truth[i].cpu().numpy(), label=f'Class Sample {i+1}', color='gray')
+            ax.plot(class_augmented[i].detach().cpu().numpy(), label=f'Augmented Sample {i+1}', color='green', alpha=0.5)
+        ax.set_title(f'Class {class_idx}')
+        ax.legend()
+        
+    plt.tight_layout()
+    plt.savefig('results/visualization/neighbors.png')
+    plt.close()
+
+def plot_latent_space_neighbors_old(vae, test_dataset, num_neighbors=5, distance=1, num_classes=6):
     # Set the model to evaluation mode
     vae.eval()
     
@@ -33,6 +79,7 @@ def plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=1, 
                 
                 # Get the latent space representation
                 mu, log_var = vae.encode(x)
+                logvar = log_var * distance
                 z = vae.reparameterize(mu, log_var)
                 
                 neighbors.append(z)

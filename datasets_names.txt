@@ -1,3 +1,10 @@
+ACSF1
+Adiac
+BeetleFly
+ArrowHead
+Beef
+BirdChicken
+BME
 CBF
 Car
 ChlorineConcentration
@@ -110,10 +117,3 @@ Worms
 WordSynonyms
 WormsTwoClass
 Yoga
-ACSF1
-Adiac
-BeetleFly
-ArrowHead
-Beef
-BirdChicken
-BME

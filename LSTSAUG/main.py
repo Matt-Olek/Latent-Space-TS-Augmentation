@@ -35,6 +35,7 @@ def main(config=config):
         latent_dim=config['LATENT_DIM'],
         learning_rate=config['VAE_LEARNING_RATE'], 
         hidden_dim=10000, 
+        knn = config['VAE_KNN']
     ))
     
     num_samples = int(len(train_loader.dataset)/nb_classes)*config["NUM_SAMPLES"]
@@ -60,34 +61,39 @@ def main(config=config):
         best_acc = 0
         best_f1 = 0
         for epoch in tqdm.tqdm(range(config["VAE_NUM_EPOCHS"])):
-            train_train_loss, train_recon_loss, train_kl_div, train_class_loss, train_fischer_loss,_ = vae.train_epoch(train_loader)
+            train_loss, train_recon_loss, train_kl_div, train_class_loss, train_contrastive_loss = vae.train_epoch(train_loader)
             
             # Test the model
             acc, f1 = vae.validate(test_dataset)
             if config["WANDB"]:
-                wandb.log({ 'train_loss': train_train_loss,
+                wandb.log({ 'train_loss': train_loss,
                             'train_recon_loss': train_recon_loss,
                             'train_kl_div': train_kl_div,
                             'train_class_loss': train_class_loss,
-                            'train_fischer_loss': train_fischer_loss,
+                            'train_contrastive_loss': train_contrastive_loss,
                             'lr': float(vae.scheduler.get_last_lr()[0]),
                             'test_accuracy': acc,
                             'test_f1': f1})
-            if epoch % 1 == 0 and config["AUGMENT_PLOT"]:
+            if epoch % 100 == 0 and config["AUGMENT_PLOT"]:
                 plot_latent_space_viz(vae, train_loader, test_dataset, num_classes=nb_classes, type='3d', id=epoch)
-                # plot_latent_space_neighbors(vae, test_dataset, num_neighbors=5, distance=config["NOISE"], num_classes=nb_classes)
-                
+                plot_latent_space_neighbors(vae,train_loader, num_neighbors=5, alpha=config["ALPHA"], num_classes=nb_classes)
+            
             if acc > best_acc:
                 best_acc = acc
                 best_f1 = f1
         print('Best test accuracy:', best_acc)
                 
-        # Save the trained model
-        model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
-        torch.save(vae.state_dict(), model_path)
-        print(f'Model saved at {model_path}')  
+        # # Save the trained model
+        # model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
+        # torch.save(vae.state_dict(), model_path)
+        # print(f'Model saved at {model_path}')  
+        
         # Build Gif
-        build_gif()
+        # build_gif()
+        
+        # Save the logs
+        logs['vae_best_acc'] = best_acc
+        logs['vae_best_f1'] = best_f1
         
         
         if config["WANDB"]:
@@ -98,6 +104,69 @@ def main(config=config):
         vae.load_state_dict(torch.load(model_path))
         vae.eval()
         print(f'Model loaded from {model_path}')
+     
+    # ---------------------------- VAE Augmentation ---------------------------- #
+    
+    if config["TEST_AUGMENT"]:
+        vae_aug = to_default_device(VAE(
+            input_dim, 
+            nb_classes, 
+            latent_dim=config['LATENT_DIM'],
+            learning_rate=config['VAE_LEARNING_RATE'], 
+            hidden_dim=10000, 
+            knn = config['VAE_KNN']
+        ))
+        # vae_aug.load_state_dict(vae.state_dict())
+        if config["WANDB"]:
+            wandb.init(project=config["WANDB_PROJECT"],
+                        config=config,
+                        tags=['vae_augmented', 'train',config["DATASET"]],
+                        name=f'{config["DATASET"]}_vae')
+            wandb.watch(vae_aug)
+            
+        print('#'*50 + '\n' +'Training the VAE model...')
+        best_acc = 0
+        best_f1 = 0
+        augmented_loader = augment_loader(train_loader, vae_aug, num_samples=num_samples, distance=config["NOISE"], scaler=scaler, num_classes=nb_classes, alpha=config["ALPHA"])
+        for epoch in tqdm.tqdm(range(config["VAE_NUM_EPOCHS"])):
+            train_loss, train_recon_loss, train_kl_div, train_class_loss, train_contrastive_loss = vae_aug.train_epoch(augmented_loader)
+            
+            # Test the model
+            acc, f1 = vae_aug.validate(test_dataset)
+            if config["WANDB"]:
+                wandb.log({ 'train_loss': train_loss,
+                            'train_recon_loss': train_recon_loss,
+                            'train_kl_div': train_kl_div,
+                            'train_class_loss': train_class_loss,
+                            'train_contrastive_loss': train_contrastive_loss,
+                            'lr': float(vae_aug.scheduler.get_last_lr()[0]),
+                            'test_accuracy': acc,
+                            'test_f1': f1})
+            if epoch % 10 == 0 and config["AUGMENT_PLOT"]:
+                plot_latent_space_viz(vae_aug, train_loader, test_dataset, num_classes=nb_classes, type='3d', id=epoch)
+                plot_latent_space_neighbors(vae_aug,train_loader, num_neighbors=5, alpha=config["ALPHA"], num_classes=nb_classes)
+            
+            if acc > best_acc:
+                best_acc = acc
+                best_f1 = f1
+        print('Best test accuracy:', best_acc)
+                
+        # # Save the trained model
+        # model_path = os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_vae-{config["BATCH_SIZE"]}bs-{config["LATENT_DIM"]}ld-{config["VAE_NUM_EPOCHS"]}e.pth')
+        # torch.save(vae.state_dict(), model_path)
+        # print(f'Model saved at {model_path}')  
+        
+        # Build Gif
+        # build_gif()
+        
+        # Save the logs
+        logs['vae_aug_best_acc'] = best_acc
+        logs['vae_aug_best_f1'] = best_f1
+        
+        
+        if config["WANDB"]:
+            wandb.finish()
+        
         
     # ---------------------------- Classifier Training ---------------------------- #
     
@@ -106,7 +175,7 @@ def main(config=config):
         if config["BASELINE"]:
             classifier = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["CLASSIFIER_LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
             if config["WANDB"]:
-                wandb.init(project='lstsaug_no_val',
+                wandb.init(project=config["WANDB_PROJECT"],
                             config=config,
                             tags=['baseline'],
                             name=f'{config["DATASET"]}_classifier_validate-{config["BATCH_SIZE"]}bs-{config["NUM_EPOCHS"]}e')
@@ -150,7 +219,7 @@ def main(config=config):
         # Train the classifier on the augmented dataset
         classifier_augmented = to_default_device(Classifier_RESNET(input_dim, nb_classes,lr=config["CLASSIFIER_LEARNING_RATE"], weight_decay=config["WEIGHT_DECAY"]))
         if config["WANDB"]:
-            wandb.init(project='lstsaug_no_val',
+            wandb.init(project=config["WANDB_PROJECT"],
                         config=config,
                         tags=['augmented'],
                         name=f'{config["DATASET"]}_classifier_augmented-{config["BATCH_SIZE"]}bs-{config["NUM_EPOCHS"]}e-{config["NUM_SAMPLES"]}ns-{config["NOISE"]}n')
@@ -160,13 +229,12 @@ def main(config=config):
         
         print('Training the classifier model on the augmented dataset...')
         print('Augmented dataset size:', len(augmented_loader_baseline.dataset))
-        logs['augmented_train_samples'] = len(augmented_loader_baseline.dataset)
+        logs['baseline_augmented_train_samples'] = len(augmented_loader_baseline.dataset)
         best_acc = 0
         best_f1 = 0
         for epoch in tqdm.tqdm(range(config["NUM_EPOCHS"])):
             train_loss, train_acc = classifier_augmented.train_epoch(augmented_loader_baseline)
             test_acc, test_f1 = classifier_augmented.validate(test_dataset)
-            # val_acc, val_f1 = classifier_augmented.validate(validation_dataset)
             if test_acc > best_acc:
                 best_acc = test_acc
                 best_f1 = test_f1
@@ -175,16 +243,14 @@ def main(config=config):
                             'train_accuracy': train_acc,
                             'test_accuracy': test_acc,
                             'test_f1': test_f1,
-                            # 'val_accuracy': val_acc,
-                            # 'val_f1': val_f1
                             })
         print('Best test accuracy:', best_acc)
         print('Best test f1:', best_f1)
         
-        logs['augmented_best_acc'] = best_acc
-        logs['augmented_best_f1'] = best_f1
-        logs['augmented_final_acc'] = test_acc
-        logs['augmented_final_f1'] = test_f1
+        logs['baseline_augmented_best_acc'] = best_acc
+        logs['baseline_augmented_best_f1'] = best_f1
+        logs['baseline_augmented_final_acc'] = test_acc
+        logs['baseline_augmented_final_f1'] = test_f1
         
         if config["WANDB"]:
             wandb.finish()     
@@ -198,14 +264,11 @@ def main(config=config):
             writer.writerow(logs.keys())  # Write column names
         writer.writerow(logs.values())
             
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main(config=config)
-    
-    # build_gif()
-    
     # datasets_names = open('datasets_names.txt', 'r').read().split('\n')
     # for dataset_name in datasets_names:
-    #     for i in range(3):
+    #     for i in range(1):
     #         if i == 0:
     #             config["WANDB"] = True
     #         else:

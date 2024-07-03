@@ -79,7 +79,81 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
 
     return train_loader, test_dataset, nb_classes, scaler
 
-def augment_loader(data_loader, model, num_samples, distance=1, scaler=None, num_classes=6, alpha=1):
+def augment_loader(data_loader, model, num_samples, scaler=None, num_classes=6, alpha=1, return_augmented_only=False):
+    """
+    Generate new samples by sampling from the neighborhood of the input samples in the latent space. Returns a data loader.
+    """
+    batch_size = data_loader.batch_size
+    sample_dim = data_loader.dataset[0][0].shape[0]
+    alpha_increment = 0.01
+    X_list = []
+    y_list = []
+
+    # Iterate through the entire data loader and accumulate the batches
+    for X_batch, y_batch in data_loader:
+        X_list.append(X_batch)
+        y_list.append(y_batch)
+
+    # Concatenate all the accumulated batches
+    X = torch.cat(X_list, dim=0)
+    y = torch.cat(y_list, dim=0)
+
+    X = to_default_device(X)
+    y = to_default_device(y)
+    model.eval()
+
+    # Compute latent space representations for all samples
+    with torch.no_grad():
+        mu, log_var = model.encode(X)
+        z = model.reparameterize(mu, log_var)
+
+    # Initialize Gaussian Mixture Models for each class using mu and log_var
+    gmns = []
+    for class_idx in range(num_classes):
+        class_indices = (y.argmax(dim=1) == class_idx).nonzero(as_tuple=True)[0].cpu().numpy()
+        class_mu = mu[class_indices].cpu().numpy().squeeze()
+        
+        mean = class_mu.mean(axis=0)
+        var = class_mu.var(axis=0) * alpha
+        
+        gmn = dist.MultivariateNormal(
+            to_default_device(torch.tensor(mean)),
+            to_default_device(torch.tensor(np.diag(var)))
+        )
+        gmns.append(gmn)
+        
+    X_aug_list = []
+    y_aug_list = []
+    
+    for class_idx in range(num_classes):
+        z_samples = gmns[class_idx].sample([num_samples]).detach()
+        x_augs = model.decode(z_samples).detach()
+        y_aug = torch.nn.functional.one_hot(to_default_device(torch.tensor([class_idx]*len(z_samples))), num_classes=num_classes).detach()
+        X_aug_list.append(x_augs)
+        y_aug_list.append(y_aug)
+        
+    X_aug = torch.cat(X_aug_list, dim=0)
+    y_aug = torch.cat(y_aug_list, dim=0)
+    
+    if return_augmented_only:
+        augment_loader = DataLoader(
+            TensorDataset(X_aug, y_aug),
+            batch_size=batch_size,
+            shuffle=True
+        )
+    else:
+        augment_loader = DataLoader(
+            TensorDataset(torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)),
+            batch_size=batch_size,
+            shuffle=True
+        )
+        print('Augmented data size:', len(augment_loader.dataset))
+        
+    return augment_loader
+        
+        
+
+def augment_loader_oold(data_loader, model, num_samples, distance=1, scaler=None, num_classes=6, alpha=1, return_augmented_only=False):
     """
     Generate new samples by sampling from the neighborhood of the input samples in the latent space. Returns a data loader.
     """
@@ -205,11 +279,18 @@ def augment_loader(data_loader, model, num_samples, distance=1, scaler=None, num
     X_aug = to_default_device(X_aug)
     y_aug = to_default_device(y_aug)
 
-    augment_loader = DataLoader(
-        TensorDataset(torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)),
-        batch_size=batch_size,
-        shuffle=True
-    )
+    if return_augmented_only:
+        augment_loader = DataLoader(
+            TensorDataset(X_aug, y_aug),
+            batch_size=batch_size,
+            shuffle=True
+        )
+    else:
+        augment_loader = DataLoader(
+            TensorDataset(torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)),
+            batch_size=batch_size,
+            shuffle=True
+        )
 
     return augment_loader
 

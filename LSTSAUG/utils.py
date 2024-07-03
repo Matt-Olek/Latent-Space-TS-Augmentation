@@ -1,3 +1,5 @@
+import os
+import csv
 import torch
 
 # ------------------------------ Utils ------------------------------ #
@@ -24,3 +26,13 @@ def custom_collate(batch, device):
         return [(item[0].to(device, non_blocking=True), item[1].to(device, non_blocking=True)) for item in batch]
     else:
         return [item.to(device, non_blocking=True) for item in batch]
+    
+def save_logs(logs, config):
+    with open(os.path.join(config["RESULTS_DIR"], 'logs.csv'), 'a', newline='') as f:
+        writer = csv.writer(f)
+        if f.tell() == 0:
+            writer.writerow(logs.keys())
+        writer.writerow(logs.values())
+        
+def get_model_path(config, name='vae'):
+    return os.path.join(config["MODEL_DIR"], f'{config["DATASET"]}_{name}.pth')

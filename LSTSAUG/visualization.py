@@ -224,3 +224,131 @@ def build_gif(folder_path='results/visualization/gif', output_path='results/visu
     # Save as GIF
     if frames:
         frames[0].save(output_path, format='GIF', append_images=frames[1:], save_all=True, duration=duration, loop=0)
+        
+def plot_latent_space_neighbor_images(vae, test_loader):
+    '''
+    Plot the latent space representation of the test dataset by classes on different dimensions.
+    '''
+    # Set the model to evaluation mode
+    vae.eval()
+    
+    x=[]
+    y=[]
+    for batch, target in test_loader:
+        batch = batch.unsqueeze(1)
+        x.append(batch)
+        y.append(target)
+    x = torch.cat(x, dim=1)
+    x = x.permute(1, 0, 2, 3)
+    
+    x = to_default_device(x)
+    y = to_default_device(torch.tensor(y))
+    
+    # random sample from the test set
+    idx = np.random.randint(len(x))
+    x = x[idx].unsqueeze(0)
+    y = y[idx].unsqueeze(0)
+    
+    # Compute the mean and variance of the latent space for the current class
+    with torch.no_grad():
+        mu, log_var = vae.encode(x)
+        z = vae.reparameterize(mu, log_var)
+        # add noise to the latent space
+        
+        decoded = vae.decode(z)
+        
+    # nowing that x and decoded are 1x3072 tensors, reform them to 3x32x32
+    x = x.view(3, 32, 32)
+    decoded = decoded.view(3, 32, 32)
+    
+    # plot the original and the decoded image
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(x.permute(1, 2, 0).cpu().numpy())
+    axes[0].set_title('Original Image')
+    axes[0].axis('off')
+    axes[1].imshow(decoded.permute(1, 2, 0).cpu().numpy())
+    axes[1].set_title('Decoded Image')
+    axes[1].axis('off')
+    plt.tight_layout()
+    plt.savefig('results/visualization/latent_space_neighbor_images.png')
+    plt.close()
+    
+def plot_latent_space_viz_bis(vae, train_loader, test_loader, num_classes=10, type='3d', id=0):
+    '''
+    Plot the latent space representation of the test dataset by classes on different dimensions.
+    '''
+    # Set the model to evaluation mode
+    vae.eval()
+    X_train = []
+    y_train = []
+
+    # Iterate through the entire data loader and accumulate the batches
+    for X_batch, y_batch in train_loader:
+        y_batch = y_batch.unsqueeze(1)
+        X_train.append(X_batch)  
+        y_train.append(y_batch)
+
+    # Concatenate all the accumulated batches
+    X_train= torch.cat(X_train, dim=0)
+    # print("X_train shape: ", X_train.shape)
+    
+    X_train = to_default_device(X_train)
+    y_train = to_default_device(torch.cat(y_train, dim=0)).squeeze(1)
+    # print("y_train shape: ", y_train.shape)
+
+    X_test=[]
+    y_test=[]
+    for batch, target in test_loader:
+        batch = batch.unsqueeze(1)
+        X_test.append(batch)
+        y_test.append(target)
+    X_test= torch.cat(X_test, dim=1)
+    X_test = X_test.permute(1, 0, 2, 3)
+    # print("X_test shape: ", X_test.shape)
+    X_test = to_default_device(X_test)
+    y_test = to_default_device(torch.tensor(y_test))
+
+    colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'black', 'lime', 'teal', 'aqua', 'navy', 'maroon', 'silver', 'gold'] * 10
+    if type == '3d':
+        fig = plt.figure(figsize=(15, 15))
+        ax = fig.add_subplot(111, projection='3d')
+
+        for class_idx in range(num_classes):
+            class_samples_train = X_train[y_train == class_idx]
+            class_samples_test = X_test[y_test == class_idx]
+            # print("class_samples_train shape: ", class_samples_train.shape)
+            # print("class_samples_test shape: ", class_samples_test.shape)
+            
+            # Compute the mean and variance of the latent space for the current class
+            with torch.no_grad():
+                # print("class_samples_train shape: ", class_samples_train.shape)
+                # print("class_samples_test shape: ", class_samples_test.shape)
+                class_samples_train = class_samples_train.squeeze(0)
+                mu_train, log_var_train = vae.encode(class_samples_train)
+                z_train = vae.reparameterize(mu_train, log_var_train)
+                # mu_train_mean = mu_train.mean(dim=0)
+                # print(f"Class {class_idx} Train Mean: {mu_train_mean}")
+
+                mu_test, log_var_test = vae.encode(class_samples_test)
+                z_test = vae.reparameterize(mu_test, log_var_test)
+
+            # Convert tensors to numpy for plotting
+            z_train = z_train.cpu().numpy()
+            z_test = z_test.cpu().numpy()
+
+            # Plot the latent space representation of the current class
+            ax.scatter(z_train[:, 0], z_train[:, 1], z_train[:, 2], label=f'Train Class {class_idx}', color=colors[class_idx], alpha=0.5)
+            ax.scatter(z_test[:, 0], z_test[:, 1], z_test[:, 2], label=f'Test Class {class_idx}', color=colors[class_idx], alpha=1)
+            ax.set_title('Latent Space Visualization (Dim 0 vs Dim 1 vs Dim 2)')
+            # ax.set_xlim([-0.3, 0.3])
+            # ax.set_ylim([-0.3, 0.3])
+            # ax.set_zlim([-0.3, 0.3])
+            angle_x = 30
+            angle_y = id*4
+            ax.view_init(angle_x, angle_y)
+            
+    plt.tight_layout()
+    plt.savefig('results/visualization/latent_space_viz_bis.png')
+    plt.savefig('results/visualization/gif/viz_{}.png'.format(id))
+    print('Saved latent space visualization to results/latent_space_viz.png')
+        

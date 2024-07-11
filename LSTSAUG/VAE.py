@@ -114,6 +114,8 @@ class VAE(nn.Module):
         total_kl_div = 0
         total_class_loss = 0
         total_contrastive_loss = 0
+        correct = 0
+        total = 0
 
         for batch, target in data_loader:
             self.optimizer.zero_grad()
@@ -141,6 +143,8 @@ class VAE(nn.Module):
             total_kl_div += kl_div.item()
             total_class_loss += class_loss.item()
             total_contrastive_loss += contrastive_loss.item()
+            correct += torch.sum(torch.argmax(y_pred, dim=1) == torch.argmax(target, dim=1)).item()
+            total += len(target)
 
         # Adjust learning rate based on total loss
         self.scheduler.step(total_loss)
@@ -155,8 +159,10 @@ class VAE(nn.Module):
         total_kl_div /= num_batches
         total_class_loss /= num_batches
         total_contrastive_loss /= num_batches
+        
+        train_acc = correct / total
 
-        return total_loss, total_recon_loss, total_kl_div, total_class_loss, total_contrastive_loss
+        return total_loss, total_recon_loss, total_kl_div, total_class_loss, total_contrastive_loss,train_acc
 
     def generate(self, num_samples):
         self.eval()
@@ -198,7 +204,7 @@ class VAE(nn.Module):
         early_stop_counter = 0
         early_stop_patience = config["EARLY_STOP_PATIENCE"]
         for epoch in tqdm.tqdm(range(config["VAE_NUM_EPOCHS"])):
-            train_loss, train_recon_loss, train_kl_div, train_class_loss, train_contrastive_loss = self.train_epoch(train_loader)
+            train_loss, train_recon_loss, train_kl_div, train_class_loss, train_contrastive_loss, train_acc = self.train_epoch(train_loader)
             
             # Test the model
             acc, f1 = self.validate(test_dataset)
@@ -210,6 +216,7 @@ class VAE(nn.Module):
                             'train_contrastive_loss': train_contrastive_loss,
                             'lr': float(self.scheduler.get_last_lr()[0]),
                             'test_accuracy': acc,
+                            'train_accuracy': train_acc,
                             'test_f1': f1})
             if epoch % 100 == 0 and config["AUGMENT_PLOT"]:
                 plot_latent_space_viz(self, train_loader, test_dataset, num_classes=nb_classes, type='3d', id=epoch)
@@ -222,9 +229,11 @@ class VAE(nn.Module):
             else:
                 early_stop_counter += 1
                 if early_stop_counter >= early_stop_patience:
-                    print('Early stopping triggered.')
+                    print('Early stopping triggered at epoch:', epoch)
                     break
         print('Best test accuracy:', best_acc)
+        plot_latent_space_viz(self, train_loader, test_dataset, num_classes=nb_classes, type='3d', id=config["VAE_NUM_EPOCHS"]+1)
+        plot_latent_space_neighbors(self,train_loader, num_neighbors=5, alpha=config["ALPHA"], num_classes=nb_classes)
                 
         # Save the trained model
         if config["SAVE_VAE"]:
@@ -235,8 +244,8 @@ class VAE(nn.Module):
         build_gif()
             
         # Save the logs
-        logs['vae_best_acc'] = best_acc
-        logs['vae_best_f1'] = best_f1
+        logs[f'{name}_best_acc'] = best_acc
+        logs[f'{name}_best_f1'] = best_f1
         
         
         if config["WANDB"]:

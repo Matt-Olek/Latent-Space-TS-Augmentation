@@ -1,9 +1,10 @@
 import torch
 import wandb 
+import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
-from utils import to_default_device
+from utils import to_default_device, get_model_path
 
 # ------------------------------ ResNet ------------------------------ #
 
@@ -46,7 +47,7 @@ class ResidualBlock(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 class Classifier_RESNET(nn.Module):
-    def __init__(self, input_shape, nb_classes, lr=0.001, weight_decay=0.0001):
+    def __init__(self, input_shape, nb_classes, learning_rate=0.001, weight_decay=0.0001):
         super(Classifier_RESNET, self).__init__()
 
         n_feature_maps = 64
@@ -64,7 +65,7 @@ class Classifier_RESNET(nn.Module):
         self.initialize_weights()
         
         self.criterion = nn.BCEWithLogitsLoss()
-        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=lr, weight_decay=weight_decay)
+        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=learning_rate, weight_decay=weight_decay)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=250 , verbose=True)
 
 
@@ -133,12 +134,36 @@ class Classifier_RESNET(nn.Module):
                         tags=['train',config["DATASET"], name],
                         name=f'{config["DATASET"]} {name}')     
             wandb.watch(self)
-        for epoch in range(config["NUM_EPOCHS"]):
+        best_acc = 0
+        best_f1 = 0
+        early_stop_counter = 0
+        early_stop_patience = config["EARLY_STOP_PATIENCE"]
+        for epoch in tqdm.tqdm(range(config["NUM_EPOCHS"])):
             train_loss, train_acc = self.train_epoch(train_loader)
             test_acc, test_f1 = self.validate(test_data)
-            print(f'Epoch: {epoch} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f} | Test F1: {test_f1:.4f}')
+            # print(f'Epoch: {epoch} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f} | Test F1: {test_f1:.4f}')
             if config["WANDB"]:
-                wandb.log({'train_loss': train_loss, 'train_acc': train_acc, 'test_acc': test_acc, 'test_f1': test_f1})
-        logs['classifier_best_acc'] = test_acc
-        logs['classifier_best_f1'] = test_f1
+                wandb.log({'train_loss': train_loss, 'train_accuracy': train_acc, 'test_accuracy': test_acc, 'test_f1': test_f1})
+                
+            if test_acc > best_acc:
+                best_acc = test_acc
+                best_f1 = test_f1
+                early_stop_counter = 0
+            else:
+                early_stop_counter += 1
+                if early_stop_counter >= early_stop_patience:
+                    print('Early stopping triggered at epoch:', epoch)
+                    break
+        print('Best test accuracy:', best_acc)
+
+        logs[f'{name}_best_acc'] = best_acc
+        logs[f'{name}_best_f1'] = best_f1
+        
+        if config["WANDB"]:
+            wandb.finish()
+            
+        if config['SAVE_CLASSIFIER']:
+            model_path = get_model_path(config, name=name)
+            torch.save(self.state_dict(), model_path)
+            print(f'Model saved to {model_path}')
         return self, logs

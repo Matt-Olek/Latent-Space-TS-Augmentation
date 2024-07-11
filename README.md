@@ -63,20 +63,26 @@ graph TD
 
 ### *Augmentation Process*
 
+ 
 ```mermaid
 graph TD
-    A[Original Time Series Data] --> B[VAE]
-    B -->|Learns Latent Space Representation| C[Latent Space]
-    C -->|Add Noise| D[New Latent Space Points]
-    D -->|Assign Original Labels| E[Generated Time Series Data]
-    E --> B
-    E --> F[Train Classification Model]
+    A[Original Time Series Data] --> B[Time Series Data]
+    subgraph Baseline Training
     A -->|Train Classification Model| G[Baseline Model]
+    end
+    subgraph VAE Training
+    B -->|Learns Latent Space Representation| C[Latent Space]
+    C -->|Fit| D[Normal Distributions]
+    E --> |Feed data back to VAE| B
+    D -->|Sample and Decode| E[Generated Time Series Data]
+    end
+    E --> F[Train Classification Model]
     F --> H[Augmented Model]
 
     G -->|Compare| I[Comparison Results]
     H -->|Compare| I
 ```
+
 
 The datasets used in this repository are from the [UCR Time Series Classification Archive](https://www.cs.ucr.edu/~eamonn/time_series_data_2018/). They are stored in the `data/` folder and loaded using the custom 'loader.py' script. 
 
@@ -132,6 +138,10 @@ The results of the experiments are stored in the `results/` folder. The followin
 - **Latent Space Neigborhoods** (`results/visualization/neighbors.png`): This plot shows the latent space neighborhoods of the original and augmented data points :
 
 ![Results](assets/neighbors_example.png) 
+
+- **Augmentation Plot** (`results/visualization/augmentation.png`): This plot shows the original and augmented time series data points :
+
+![Results](assets/augmentation_example.png)
 
 
 

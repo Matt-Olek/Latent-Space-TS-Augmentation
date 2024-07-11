@@ -13,7 +13,7 @@ import pyro.distributions as dist
 
 #---------------------------------- Data Loader ----------------------------------#
 
-def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
+def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
     path = data_dir + '/UCRArchive_2018/{}/'.format(dataset_name)
 
     train_file = path + '{}_TRAIN.tsv'.format(dataset_name)
@@ -34,14 +34,16 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None):
         train_data[0] = train_data[0].replace(-1, 0).replace(1, 1)
         test_data[0] = test_data[0].replace(-1, 0).replace(1, 1)
 
-    print('Building loader for dataset : {}'.format(dataset_name))
-    print('Number of detected classes : {}'.format(nb_classes))
-    print('Classes : {}'.format(train_data[0].unique()))
-    print('Number of detected samples in the training set : {}'.format(len(train_data)))
-    print('Number of detected samples in the test set : {}'.format(len(test_data)))
+    if plot:
+        print('Building loader for dataset : {}'.format(dataset_name))
+        print('Number of detected classes : {}'.format(nb_classes))
+        print('Classes : {}'.format(train_data[0].unique()))
+        print('Number of detected samples in the training set : {}'.format(len(train_data)))
+        print('Number of detected samples in the test set : {}'.format(len(test_data)))
 
     batch_size = max(batch_size, len(train_data)//10)
-    print('Batch size : {}'.format(batch_size))
+    if plot:
+        print('Batch size : {}'.format(batch_size))
     train_np = train_data.to_numpy()
     test_np = test_data.to_numpy()
     train = train_np.reshape(np.shape(train_np)[0], 1, np.shape(train_np)[1])

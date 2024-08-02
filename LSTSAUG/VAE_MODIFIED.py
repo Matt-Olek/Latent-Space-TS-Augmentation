@@ -105,7 +105,7 @@ class ConvVAE(nn.Module):
         self.knn.fit(z.detach().cpu().numpy(), y.cpu().numpy()) #.argmax(dim=1)
         
     def contrastive_loss(self, z, labels, margin=1.0):
-        pairwise_distances = torch.cdist(z, z, p=2)
+        pairwise_distances = 1 - torch.cosine_similarity(z.unsqueeze(1), z.unsqueeze(0), dim=2)
         # labels = labels.argmax(dim=1)    CIFAR 10
         positive_mask = labels.unsqueeze(0) == labels.unsqueeze(1)
         negative_mask = ~positive_mask

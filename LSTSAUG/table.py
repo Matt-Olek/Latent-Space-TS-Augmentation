@@ -22,6 +22,13 @@ def csv_to_grouped_markdown(csv_file_path, md_file_path):
     df['classifier_augmented_augmented_best_f1'] = df['classifier_augmented_augmented_best_f1'].round(2)
     df['classifier_augmented_augmented_augmented_best_f1'] = df['classifier_augmented_augmented_augmented_best_f1'].round(2)
     
+    df['vae_is_augmented'] = df[['vae_augmented_best_acc', 'vae_augmented_augmented_best_acc', 'vae_augmented_augmented_augmented_best_acc']].ge(df['vae_best_acc'], axis=0).any(axis=1)
+    # Replace vae_is_augmented with green emoji or red emoji
+    df['vae_is_augmented'] = df['vae_is_augmented'].apply(lambda x: '✅' if x else '❌')
+    
+    df['classifier_is_augmented'] = df[['classifier_augmented_best_acc', 'classifier_augmented_augmented_best_acc', 'classifier_augmented_augmented_augmented_best_acc']].ge(df['classifier_best_acc'], axis=0).any(axis=1)
+    # Replace classifier_is_augmented with green emoji or red emoji
+    df['classifier_is_augmented'] = df['classifier_is_augmented'].apply(lambda x: '✅' if x else '❌')
     # Group columns by model type and combine them into a single column
     df['VAE acc'] = df[['vae_best_acc', 'vae_augmented_best_acc', 'vae_augmented_augmented_best_acc', 'vae_augmented_augmented_augmented_best_acc']].apply(lambda row: '/'.join(row.values.astype(str)), axis=1)
     df['VAE f1'] = df[['vae_best_f1', 'vae_augmented_best_f1', 'vae_augmented_augmented_best_f1', 'vae_augmented_augmented_augmented_best_f1']].apply(lambda row: '/'.join(row.values.astype(str)), axis=1)
@@ -29,7 +36,7 @@ def csv_to_grouped_markdown(csv_file_path, md_file_path):
     df['Classifier f1'] = df[['classifier_best_f1', 'classifier_augmented_best_f1', 'classifier_augmented_augmented_best_f1', 'classifier_augmented_augmented_augmented_best_f1']].apply(lambda row: '/'.join(row.values.astype(str)), axis=1)
     
     # Select the relevant columns
-    grouped_df = df[['dataset', 'num_classes', 'num_train_samples', 'num_test_samples', 'VAE acc', 'VAE f1', 'Classifier acc', 'Classifier f1']]
+    grouped_df = df[['dataset', 'num_classes', 'num_train_samples', 'num_test_samples', 'vae_is_augmented', 'VAE acc', 'VAE f1', 'classifier_is_augmented', 'Classifier acc', 'Classifier f1']]
     
     # Convert the grouped DataFrame to a markdown table
     markdown_table = grouped_df.to_markdown(index=False)

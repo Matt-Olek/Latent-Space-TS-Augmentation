@@ -163,3 +163,4 @@ data/
 results/visualization/
 models/
 wandb/
+nohup.out

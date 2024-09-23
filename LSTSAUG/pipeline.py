@@ -83,14 +83,14 @@ def pipeline(config=config):
         vae.eval()
         print(f"Model loaded from {model_path}")
 
-    plot_latent_space_viz(
-        vae,
-        train_loader,
-        test_dataset,
-        num_classes=nb_classes,
-        type="3d",
-        id=f"dataset_{config['DATASET']}_original",
-    )
+    # plot_latent_space_viz(
+    #     vae,
+    #     train_loader,
+    #     test_dataset,
+    #     num_classes=nb_classes,
+    #     type="3d",
+    #     id=f"dataset_{config['DATASET']}_original",
+    # )
     # ---------------------------- VAE and Classifier Augmentation Steps ---------------------------- #
 
     augmented_train_loader = train_loader
@@ -148,14 +148,14 @@ def pipeline(config=config):
                 name=f"vae_augmented_step_{augmentation_step}",
             )
 
-            plot_latent_space_viz(
-                vae_current,
-                augmented_train_loader,
-                test_dataset,
-                num_classes=nb_classes,
-                type="3d",
-                id=f"dataset_{config['DATASET']}_augmented_step_{augmentation_step}",
-            )
+            # plot_latent_space_viz(
+            #     vae_current,
+            #     augmented_train_loader,
+            #     test_dataset,
+            #     num_classes=nb_classes,
+            #     type="3d",
+            #     id=f"dataset_{config['DATASET']}_augmented_step_{augmentation_step}",
+            # )
 
         # # ---------------------------- Classifier Training ---------------------------- #
 

@@ -1,0 +1,2 @@
+error
+'GaussianMixture' object has no attribute 'covariances_'

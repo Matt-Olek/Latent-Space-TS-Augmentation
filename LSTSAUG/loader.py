@@ -46,7 +46,7 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
         )
         print("Number of detected samples in the test set : {}".format(len(test_data)))
 
-    batch_size = max(batch_size, len(train_data) // 10)
+    # batch_size = max(batch_size, len(train_data) // 10)
     if plot:
         print("Batch size : {}".format(batch_size))
     train_np = train_data.to_numpy()
@@ -86,6 +86,11 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
     return train_loader, test_dataset, nb_classes, scaler
 
 
+from sklearn.mixture import GaussianMixture
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+
+
 def augment_loader(
     data_loader,
     model,
@@ -96,7 +101,8 @@ def augment_loader(
     return_augmented_only=False,
 ):
     """
-    Generate new samples by sampling from the neighborhood of the input samples in the latent space. Returns a data loader.
+    Generate new samples by sampling from the neighborhood of the input samples in the latent space using a Gaussian Mixture Model (GMM).
+    Returns a data loader.
     """
     batch_size = data_loader.batch_size
     sample_dim = data_loader.dataset[0][0].shape[0]
@@ -109,8 +115,8 @@ def augment_loader(
         y_list.append(y_batch)
 
     # Concatenate all the accumulated batches
-    X = torch.cat(X_list, dim=0)
-    y = torch.cat(y_list, dim=0)
+    X = torch.cat(X_list, dim=0).float()  # Ensure consistent dtype (float32)
+    y = torch.cat(y_list, dim=0).float()  # Ensure consistent dtype (float32)
 
     X = to_default_device(X)
     y = to_default_device(y)
@@ -120,54 +126,83 @@ def augment_loader(
     with torch.no_grad():
         mu, log_var = model.encode(X)
 
-    # Initialize Gaussian Mixture Models for each class using mu and log_var
-    gmns = []
+    # Fit a GMM for each class
+    gmms = []
     for class_idx in range(num_classes):
         class_indices = (
             (y.argmax(dim=1) == class_idx).nonzero(as_tuple=True)[0].cpu().numpy()
         )
-        mu_class = mu[class_indices]
-        log_var_class = log_var[class_indices]
-        gmn = dist.MultivariateNormal(
-            mu_class.mean(dim=0), torch.diag(log_var_class.exp().mean(dim=0))
-        )
-        gmns.append(gmn)
+        mu_class = mu[class_indices].cpu().numpy()
+        log_var_class = log_var[class_indices].cpu().numpy()
+
+        # Fit a GMM with as many components as there are samples in the class
+        gmm = GaussianMixture(n_components=len(class_indices), covariance_type="full")
+        gmm.fit(mu_class)
+        for i in range(gmm.n_components):
+            gmm.covariances_[i] = np.diag(np.exp(log_var_class[i]) * alpha)
+            gmm.means_[i] = mu_class[i]
+
+        gmms.append(gmm)
 
     X_aug_list = []
     y_aug_list = []
 
+    # Augment data for each class using its GMM
     for class_idx in range(num_classes):
-        z_samples = gmns[class_idx].sample([num_samples]).detach()
+        z_samples, _ = gmms[class_idx].sample(num_samples)
+        z_samples = to_default_device(
+            torch.tensor(z_samples).float()
+        ).detach()  # Ensure float dtype
 
-        # Compute the log probability of the samples for the current class and the other classes
+        # Compute log probabilities for each class and filter samples
         for other_class_idx in range(num_classes):
-            log_prob = gmns[class_idx].log_prob(z_samples)
+            if z_samples.shape[0] == 0:
+                break
             if other_class_idx == class_idx:
                 continue
             else:
-                log_prob_other_class = gmns[other_class_idx].log_prob(z_samples)
-                should_be_kept = log_prob > log_prob_other_class
+                log_prob_class = gmms[class_idx].score_samples(z_samples.cpu().numpy())
+                log_prob_other_class = gmms[other_class_idx].score_samples(
+                    z_samples.cpu().numpy()
+                )
+
+                # Keep samples where the log probability for the current class is higher
+                should_be_kept = log_prob_class > log_prob_other_class
                 z_samples = z_samples[should_be_kept]
                 print(
-                    "Keeping",
-                    should_be_kept.sum().item(),
+                    "Class",
+                    class_idx,
+                    ": Keeping",
+                    should_be_kept.sum(),
                     "samples out of",
                     len(should_be_kept),
                 )
 
+        # If no samples remain, skip this class
         if len(z_samples) == 0:
+            print(f"No samples retained for class {class_idx}")
             continue
-        else:
-            x_augs = model.decode(z_samples).detach()
-            y_aug = torch.nn.functional.one_hot(
+
+        # Decode the remaining latent samples into the input space
+        x_augs = model.decode(z_samples).detach().float()  # Ensure float dtype
+        y_aug = (
+            torch.nn.functional.one_hot(
                 to_default_device(torch.tensor([class_idx] * len(z_samples))),
                 num_classes=num_classes,
-            ).detach()
-            X_aug_list.append(x_augs)
-            y_aug_list.append(y_aug)
+            )
+            .detach()
+            .float()
+        )  # Ensure float dtype
 
-    X_aug = torch.cat(X_aug_list, dim=0)
-    y_aug = torch.cat(y_aug_list, dim=0)
+        X_aug_list.append(x_augs)
+        y_aug_list.append(y_aug)
+
+    # Check if no augmented data is left
+    if len(X_aug_list) == 0 or len(y_aug_list) == 0:
+        raise ValueError("All augmented samples were dropped. No data to return.")
+
+    X_aug = torch.cat(X_aug_list, dim=0).float()  # Ensure float dtype
+    y_aug = torch.cat(y_aug_list, dim=0).float()  # Ensure float dtype
 
     if return_augmented_only:
         augment_loader = DataLoader(
@@ -179,10 +214,10 @@ def augment_loader(
                 TensorDataset(X, y), batch_size=batch_size, shuffle=True
             )
         else:
-
             augment_loader = DataLoader(
                 TensorDataset(
-                    torch.cat((X, X_aug), dim=0), torch.cat((y, y_aug), dim=0)
+                    torch.cat((X, X_aug), dim=0).float(),  # Ensure float dtype
+                    torch.cat((y, y_aug), dim=0).float(),  # Ensure float dtype
                 ),
                 batch_size=batch_size,
                 shuffle=True,

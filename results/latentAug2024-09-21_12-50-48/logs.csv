@@ -1,0 +1,2 @@
+error
+"Found array with 0 sample(s) (shape=(0, 50)) while a minimum of 1 is required by GaussianMixture."

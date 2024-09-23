@@ -53,31 +53,31 @@ def pipeline(config=config):
         print("#" * 50 + "\n" + "Training the VAE model...")
         vae, logs = vae.train_vae(train_loader, test_dataset, nb_classes, config, logs)
 
-        # print("#" * 50 + "\n" + "Training the classifier on the original data...")
+        print("#" * 50 + "\n" + "Training the classifier on the original data...")
 
-        # if config["CLASSIFIER"] == "FCN":
-        #     classifier = to_default_device(
-        #         Classifier_FCN(
-        #             input_dim,
-        #             nb_classes,
-        #             learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-        #             weight_decay=config["WEIGHT_DECAY"],
-        #         )
-        #     )
+        if config["CLASSIFIER"] == "FCN":
+            classifier = to_default_device(
+                Classifier_FCN(
+                    input_dim,
+                    nb_classes,
+                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                    weight_decay=config["WEIGHT_DECAY"],
+                )
+            )
 
-        # else:
-        #     classifier = to_default_device(
-        #         Classifier_RESNET(
-        #             input_dim,
-        #             nb_classes,
-        #             learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-        #             weight_decay=config["WEIGHT_DECAY"],
-        #         )
-        #     )
+        else:
+            classifier = to_default_device(
+                Classifier_RESNET(
+                    input_dim,
+                    nb_classes,
+                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                    weight_decay=config["WEIGHT_DECAY"],
+                )
+            )
 
-        # classifier, logs = classifier.train_classifier(
-        #     train_loader, test_dataset, config, logs, name="classifier"
-        # )
+        classifier, logs = classifier.train_classifier(
+            train_loader, test_dataset, config, logs, name="classifier"
+        )
     else:
         vae.load_state_dict(torch.load(model_path))
         vae.eval()
@@ -159,36 +159,36 @@ def pipeline(config=config):
 
         # # ---------------------------- Classifier Training ---------------------------- #
 
-        # print(
-        #     "#" * 50
-        #     + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
-        # )
-        # if config["CLASSIFIER"] == "FCN":
-        #     classifier_current = to_default_device(
-        #         Classifier_FCN(
-        #             input_dim,
-        #             nb_classes,
-        #             learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-        #             weight_decay=config["WEIGHT_DECAY"],
-        #         )
-        #     )
-        # else:
-        #     classifier_current = to_default_device(
-        #         Classifier_RESNET(
-        #             input_dim,
-        #             nb_classes,
-        #             learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-        #             weight_decay=config["WEIGHT_DECAY"],
-        #         )
-        #     )
+        print(
+            "#" * 50
+            + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
+        )
+        if config["CLASSIFIER"] == "FCN":
+            classifier_current = to_default_device(
+                Classifier_FCN(
+                    input_dim,
+                    nb_classes,
+                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                    weight_decay=config["WEIGHT_DECAY"],
+                )
+            )
+        else:
+            classifier_current = to_default_device(
+                Classifier_RESNET(
+                    input_dim,
+                    nb_classes,
+                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                    weight_decay=config["WEIGHT_DECAY"],
+                )
+            )
 
-        # classifier_current, logs = classifier_current.train_classifier(
-        #     augmented_train_loader,
-        #     test_dataset,
-        #     config,
-        #     logs,
-        #     name=f"classifier_augmented_step_{augmentation_step}",
-        # )
+        classifier_current, logs = classifier_current.train_classifier(
+            augmented_train_loader,
+            test_dataset,
+            config,
+            logs,
+            name=f"classifier_augmented_step_{augmentation_step}",
+        )
 
         augmentation_step += 1
 

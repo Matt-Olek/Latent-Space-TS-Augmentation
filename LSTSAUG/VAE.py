@@ -149,7 +149,7 @@ class VAE(nn.Module):
             recon_loss = nn.functional.mse_loss(x_hat, x, reduction="mean")
 
             # Combine losses
-            loss = class_loss + kl_div + contrastive_loss + recon_loss
+            loss = contrastive_loss + recon_loss + class_loss + kl_div
 
             # Backward pass
             loss.backward()
@@ -170,7 +170,7 @@ class VAE(nn.Module):
         self.scheduler.step(total_loss)
 
         # Fit KNN
-        self.fit_knn(data_loader)
+        # self.fit_knn(data_loader)
 
         # Average the losses over all batches
         num_batches = len(data_loader)

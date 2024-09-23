@@ -1,6 +1,6 @@
 config = {
     # ---------------- DATA PARAMETERS---------------- #
-    "DATA_DIR": "../FastAutoAugment-Time-Series/data",
+    "DATA_DIR": "data/",
     "RESULTS_DIR": "results/latentAug",
     "MODEL_DIR": "models",
     "DATASET": "MedicalImages",
@@ -17,19 +17,19 @@ config = {
     "EARLY_STOP_PATIENCE": 150,
     "VAE_KNN": 100,
     "VAE_HIDDEN_DIM": 1000,
-    "WEIGHT_DECAY": 0.000001,
+    "WEIGHT_DECAY": 1e-6,
     "SAVE_VAE": False,
     "SAVE_CLASSIFIER": False,
     # ---------------- AUGMENTATION PARAMETERS ---------------- #
-    "MAX_AUGMENTATION_STEPS": 6,
+    "MAX_AUGMENTATION_STEPS": 5,
     "AUGMENT_PLOT": False,
     "TEST_AUGMENT": True,
     "USE_TRAINED": False,
     "BASELINE": True,
     "NUM_SAMPLES": 1,
     "NOISE": 0.01,
-    "ALPHA": 1.1,
+    "ALPHA": 1.5,
     # ---------------- WANDB PARAMETERS ---------------- #
-    "WANDB": True,
-    "WANDB_PROJECT": "LATENT_AUG",
+    "WANDB": False,
+    "WANDB_PROJECT": "LATENT_AUG-UCR",
 }

@@ -28,6 +28,16 @@ def custom_collate(batch, device):
         return [item.to(device, non_blocking=True) for item in batch]
     
 def save_logs(logs, config):
+    
+    # If the key 'class_trusts' exists in the logs, we save it as a separate csv file
+    if "class_trusts" in logs:
+        with open(os.path.join(config["RESULTS_DIR"], 'class_trusts.csv'), 'a', newline='') as f:
+            writer = csv.writer(f)
+            if f.tell() == 0:
+                writer.writerow(["dataset"] + list(range(logs["class_trusts"].shape[1])))
+            writer.writerow([logs["dataset"]] + logs["class_trusts"].tolist())
+        logs.pop("class_trusts")
+    
     with open(os.path.join(config["RESULTS_DIR"], 'logs.csv'), 'a', newline='') as f:
         writer = csv.writer(f)
         if f.tell() == 0:

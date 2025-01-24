@@ -1,5 +1,6 @@
 # ---------------------------------- Imports ----------------------------------#
 
+from LSTSAUG.expansion_eval import eval_gmms
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from utils import to_default_device
@@ -146,6 +147,9 @@ def augment_loader(
 
     X_aug_list = []
     y_aug_list = []
+    
+    # Evaluate the trustworthiness of the GMMs
+    mean_trust, class_trusts, all_probs = eval_gmms(gmms, num_samples) 
 
     # Augment data for each class using its GMM
     for class_idx in range(num_classes):

@@ -1,6 +1,6 @@
 # ---------------------------------- Imports ----------------------------------#
 
-from LSTSAUG.expansion_eval import eval_gmms
+from expansion_eval import eval_gmms
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from utils import to_default_device
@@ -100,6 +100,8 @@ def augment_loader(
     num_classes=6,
     alpha=1,
     return_augmented_only=False,
+    logs=None,
+    step=None,
 ):
     """
     Generate new samples by sampling from the neighborhood of the input samples in the latent space using a Gaussian Mixture Model (GMM).
@@ -149,7 +151,7 @@ def augment_loader(
     y_aug_list = []
     
     # Evaluate the trustworthiness of the GMMs
-    mean_trust, class_trusts, all_probs = eval_gmms(gmms, num_samples) 
+    mean_trust, class_trusts, all_probs, logs = eval_gmms(gmms, num_eval_samples=1000, logs=logs, step=step) 
 
     # Augment data for each class using its GMM
     for class_idx in range(num_classes):
@@ -228,7 +230,7 @@ def augment_loader(
             )
         print("Augmented data size:", len(augment_loader.dataset))
 
-    return augment_loader
+    return augment_loader, logs
 
 
 def to_default_device(data):

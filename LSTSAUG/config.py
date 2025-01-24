@@ -2,6 +2,7 @@ config = {
     # ---------------- DATA PARAMETERS---------------- #
     "DATA_DIR": "data/",
     "RESULTS_DIR": "results/latentAug",
+    "RESULTS_DIR_ROOT": "results/latentAug",
     "MODEL_DIR": "models",
     "DATASET": "MedicalImages",
     # ---------------- MODEL PARAMETERS ---------------- #

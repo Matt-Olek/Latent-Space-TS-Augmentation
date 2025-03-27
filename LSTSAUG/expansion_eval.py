@@ -29,17 +29,15 @@ def _naive_eval_gmms(gmms, num_eval_samples, logs, step):
         class_log_probs.append(log_probs)
         
         # For each class compute the proportion of samples that are more likely to belong to that class than another, for every other class
-        proportions = (log_probs[:, class_idx].unsqueeze(1) < log_probs).float().mean(dim=0)
+        proportions = (log_probs.max(dim=1).indices == class_idx).float()
         
         # Compute the trust as the proportion of samples that are more likely to belong to the class than any other
-        trust = 1 - proportions.sum()
+        trust = proportions.mean()
         class_trusts.append(trust)
         
     all_probs = torch.stack(class_log_probs, dim=0)
     class_trusts = torch.stack(class_trusts, dim=0)
     mean_trust = class_trusts.mean()
-    
-    print(f"class_trusts: {class_trusts}")
     
     logs[f"mean_trust_step_{step}"] = mean_trust.cpu().numpy()
     if not logs.get("class_trusts"):

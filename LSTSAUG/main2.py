@@ -7,7 +7,7 @@ import os
 import warnings
 warnings.filterwarnings("ignore", message=".*cudnnException.*CUDNN_STATUS_NOT_SUPPORTED.*", category=UserWarning, module="torch")
 
-log_error = False
+log_error = True
 
 if __name__ == "__main__":
     classifier_Types = ["FCN", "Resnet"]
@@ -15,7 +15,7 @@ if __name__ == "__main__":
         config["CLASSIFIER"] = classifier_Type
         # datasets_names = open("data/datasets_names.txt", "r").read().split("\n")
         # Get the datasets names by listing the subdirectories in the "UCRArchive_2018" directory
-        datasets_names = os.listdir("data/UCRArchive_2018")  # [0]
+        datasets_names = os.listdir("data/UCRArchive_2018")
         # datasets_names = [datasets_names]
         current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
         config["RESULTS_DIR"] = config["RESULTS_DIR_ROOT"] + current_time

@@ -51,7 +51,9 @@ def save_logs(logs, config):
             
             # Save the updated json file
             json.dump(current_results, f)
-        
+            
+            
+        del logs["class_trusts"]
     
     with open(os.path.join(config["RESULTS_DIR"], 'logs.csv'), 'a', newline='') as f:
         writer = csv.writer(f)

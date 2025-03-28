@@ -15,11 +15,11 @@ if __name__ == "__main__":
         config["CLASSIFIER"] = classifier_Type
         # datasets_names = open("data/datasets_names.txt", "r").read().split("\n")
         # Get the datasets names by listing the subdirectories in the "UCRArchive_2018" directory
-        datasets_names = os.listdir("data/UCRArchive_2018")
+        datasets_names = os.listdir("../KoVAE/data/UCR_AUG_3")
         # datasets_names = [datasets_names]
         current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
         config["RESULTS_DIR"] = config["RESULTS_DIR_ROOT"] + current_time
-        config["WITH_AUG"] = True
+        config["WITH_AUG"] = False
         # Print the pytorch device
         print(f"Device: {get_default_device()}")
         for dataset_name in datasets_names:

@@ -16,10 +16,11 @@ import pyro.distributions as dist
 
 
 def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
-    path = data_dir + "/UCRArchive_2018/{}/".format(dataset_name)
+    path_train = data_dir + "/UCR_AUG_3/{}/".format(dataset_name)
+    path_test = data_dir + "/UCR/{}/".format(dataset_name)
 
-    train_file = path + "{}_TRAIN.tsv".format(dataset_name)
-    test_file = path + "{}_TEST.tsv".format(dataset_name)
+    train_file = path_train + "{}_TRAIN.tsv".format(dataset_name)
+    test_file = path_test + "{}_TEST.tsv".format(dataset_name)
 
     train_data = pd.read_csv(train_file, sep="\t", header=None)
     test_data = pd.read_csv(test_file, sep="\t", header=None)

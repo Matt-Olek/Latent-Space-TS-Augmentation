@@ -161,6 +161,7 @@ cython_debug/
 
 data/**
 results/** */
+results_old/
 models/
 wandb/
 nohup.out

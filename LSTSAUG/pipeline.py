@@ -48,6 +48,10 @@ def pipeline(config=config):
                 learning_rate=config["VAE_LEARNING_RATE"],
                 hidden_dim=config["VAE_HIDDEN_DIM"],
                 knn=min(config["VAE_KNN"], len(train_loader.dataset) // 2),
+                recon_weight=config["RECON_WEIGHT"],
+                kl_weight=config["KL_WEIGHT"],
+                classifier_weight=config["CLASSIFIER_WEIGHT"],
+                contrastive_weight=config["CONTRASTIVE_WEIGHT"],
             )
         )
 

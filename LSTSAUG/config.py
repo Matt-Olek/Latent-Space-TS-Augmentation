@@ -21,6 +21,11 @@ config = {
     "WEIGHT_DECAY": 1e-6,
     "SAVE_VAE": False,
     "SAVE_CLASSIFIER": False,
+    # ---------------- LOSS PARAMETERS ---------------- #
+    "RECON_WEIGHT": 1,
+    "KL_WEIGHT": 1,
+    "CLASSIFIER_WEIGHT": 1,
+    "CONTRASTIVE_WEIGHT": 1,
     # ---------------- AUGMENTATION PARAMETERS ---------------- #
     "MAX_AUGMENTATION_STEPS": 5,
     "AUGMENT_PLOT": False,

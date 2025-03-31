@@ -16,7 +16,7 @@ import pyro.distributions as dist
 
 
 def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
-    path_train = data_dir + "/UCR_AUG_3/{}/".format(dataset_name)
+    path_train = data_dir + "/UCR/{}/".format(dataset_name)
     path_test = data_dir + "/UCR/{}/".format(dataset_name)
 
     train_file = path_train + "{}_TRAIN.tsv".format(dataset_name)

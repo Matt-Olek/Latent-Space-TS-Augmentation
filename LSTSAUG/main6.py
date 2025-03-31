@@ -54,7 +54,7 @@ if __name__ == "__main__":
     
     print(f'Grid search with {len(grid)} configurations')
     
-    for i in tqdm(range(len(grid)//2)):
+    for i in tqdm(range(len(grid)//2, len(grid))):
         
         # Normalizing the weights so that they sum to 1
         total = sum(grid[i])

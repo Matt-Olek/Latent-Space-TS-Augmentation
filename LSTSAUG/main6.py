@@ -5,6 +5,7 @@ import time
 import os
 import itertools
 from tqdm import tqdm
+import pandas as pd
 
 import warnings
 warnings.filterwarnings("ignore", message=".*cudnnException.*CUDNN_STATUS_NOT_SUPPORTED.*", category=UserWarning, module="torch")
@@ -18,13 +19,15 @@ CONTRASTIVE_WEIGHT_GRID = [1, 3, 5, 10]
 
 grid = list(itertools.product(RECON_WEIGHT_GRID, KL_WEIGHT_GRID, CLASSIFIER_WEIGHT_GRID, CONTRASTIVE_WEIGHT_GRID))
 
+datasets_names_benchmark = pd.read_csv("baselines.csv", sep=";", skiprows=1).iloc[:, 0].tolist()
+
 def main():
     classifier_Types = ["FCN", "Resnet"]
     for classifier_Type in classifier_Types:
         config["CLASSIFIER"] = classifier_Type
         # datasets_names = open("data/datasets_names.txt", "r").read().split("\n")
         # Get the datasets names by listing the subdirectories in the "UCRArchive_2018" directory
-        datasets_names = os.listdir("../KoVAE/data/UCR")
+        datasets_names = datasets_names_benchmark
         # datasets_names = [datasets_names]
         current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
         config["RESULTS_DIR"] = config["RESULTS_DIR_ROOT"] + current_time

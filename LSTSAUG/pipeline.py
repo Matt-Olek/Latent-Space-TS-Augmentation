@@ -37,135 +37,78 @@ def pipeline(config=config, visualizations=False):
 
     # ---------------------------- VAE Training ---------------------------- #
 
-    start_time = time.time()
+    # If this arg of the config is set to True, or is not set, then we train the VAE model
+    if config["WITH_AUG"]:
 
-    vae = to_default_device(
-        VAE(
-            input_dim,
-            nb_classes,
-            latent_dim=config["LATENT_DIM"],
-            learning_rate=config["VAE_LEARNING_RATE"],
-            hidden_dim=config["VAE_HIDDEN_DIM"],
-            knn=min(config["VAE_KNN"], len(train_loader.dataset) // 2),
-        )
-    )
+        start_time = time.time()
 
-    model_path = get_model_path(config, name="vae")
-    if not config["USE_TRAINED"] or not os.path.exists(model_path):
-        print("#" * 50 + "\n" + "Training the VAE model...")
-        vae, logs = vae.train_vae(train_loader, test_dataset, nb_classes, config, logs)
-
-        print("#" * 50 + "\n" + "Training the classifier on the original data...")
-
-        if config["CLASSIFIER"] == "FCN":
-            classifier = to_default_device(
-                Classifier_FCN(
-                    input_dim,
-                    nb_classes,
-                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-                    weight_decay=config["WEIGHT_DECAY"],
-                )
+        vae = to_default_device(
+            VAE(
+                input_dim,
+                nb_classes,
+                latent_dim=config["LATENT_DIM"],
+                learning_rate=config["VAE_LEARNING_RATE"],
+                hidden_dim=config["VAE_HIDDEN_DIM"],
+                knn=min(config["VAE_KNN"], len(train_loader.dataset) // 2),
+                recon_weight=config["RECON_WEIGHT"],
+                kl_weight=config["KL_WEIGHT"],
+                classifier_weight=config["CLASSIFIER_WEIGHT"],
+                contrastive_weight=config["CONTRASTIVE_WEIGHT"],
             )
+        )
 
+        model_path = get_model_path(config, name="vae")
+        if not config["USE_TRAINED"] or not os.path.exists(model_path):
+            print("#" * 50 + "\n" + "Training the VAE model...")
+            vae, logs = vae.train_vae(train_loader, test_dataset, nb_classes, config, logs)
+
+            print("#" * 50 + "\n" + "Training the classifier on the original data...")
+
+            if config["CLASSIFIER"] == "FCN":
+                classifier = to_default_device(
+                    Classifier_FCN(
+                        input_dim,
+                        nb_classes,
+                        learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                        weight_decay=config["WEIGHT_DECAY"],
+                    )
+                )
+
+            else:
+                classifier = to_default_device(
+                    Classifier_RESNET(
+                        input_dim,
+                        nb_classes,
+                        learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                        weight_decay=config["WEIGHT_DECAY"],
+                    )
+                )
+
+            classifier, logs = classifier.train_classifier(
+                train_loader, test_dataset, config, logs, name="classifier"
+            )
         else:
-            classifier = to_default_device(
-                Classifier_RESNET(
-                    input_dim,
-                    nb_classes,
-                    learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-                    weight_decay=config["WEIGHT_DECAY"],
-                )
-            )
+            vae.load_state_dict(torch.load(model_path))
+            vae.eval()
+            print(f"Model loaded from {model_path}")
 
-        classifier, logs = classifier.train_classifier(
-            train_loader, test_dataset, config, logs, name="classifier"
-        )
-    else:
-        vae.load_state_dict(torch.load(model_path))
-        vae.eval()
-        print(f"Model loaded from {model_path}")
+        # plot_latent_space_viz(
+        #     vae,
+        #     train_loader,
+        #     test_dataset,
+        #     num_classes=nb_classes,
+        #     type="3d",
+        #     id=f"dataset_{config['DATASET']}_original",
+        # )
+        # ---------------------------- VAE and Classifier Augmentation Steps ---------------------------- #
 
-    if visualizations:
-        plot_latent_space_viz(
-            vae,
-            train_loader,
-            test_dataset,
-            num_classes=nb_classes,
-            type="3d",
-            id=f"dataset_{config['DATASET']}_original",
-        )
-    # ---------------------------- VAE and Classifier Augmentation Steps ---------------------------- #
+        augmented_train_loader = train_loader
+        vae_current = vae
+        augmentation_step = 0
 
-    augmented_train_loader = train_loader
-    vae_current = vae
-    augmentation_step = 0
-
-    augmented_train_loader = augment_loader(
-        augmented_train_loader,
-        vae_current,
-        num_samples=num_samples,
-        scaler=scaler,
-        num_classes=nb_classes,
-        alpha=config["ALPHA"],
-    )
-
-    if visualizations:
-        plot_latent_space_viz(
-            vae_current,
-            augmented_train_loader,
-            test_dataset,
-            num_classes=nb_classes,
-            type="3d",
-            id=f"dataset_{config['DATASET']}_before_augmented_step_{augmentation_step}",
-        )
-
-    print(
-        "#" * 50 + f"\nAugmented dataset size (step {augmentation_step}): ",
-        len(augmented_train_loader.dataset),
-    )
-
-    # Train the classifier on augmented data with baseline VAE (step 0)
-    print(
-        "#" * 50
-        + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
-    )
-    if config["CLASSIFIER"] == "FCN":
-        print("Using FCN classifier")
-        classifier_current = to_default_device(
-            Classifier_FCN(
-                input_dim,
-                nb_classes,
-                learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-                weight_decay=config["WEIGHT_DECAY"],
-            )
-        )
-    else:
-        print("Using ResNet classifier")
-        classifier_current = to_default_device(
-            Classifier_RESNET(
-                input_dim,
-                nb_classes,
-                learning_rate=config["CLASSIFIER_LEARNING_RATE"],
-                weight_decay=config["WEIGHT_DECAY"],
-            )
-        )
-
-    classifier_current, logs = classifier_current.train_classifier(
-        augmented_train_loader,
-        test_dataset,
-        config,
-        logs,
-        name=f"classifier_augmented_step_{augmentation_step}",
-    )
-
-    augmentation_step += 1
-
-    while augmentation_step <= config["MAX_AUGMENTATION_STEPS"]:
-
-        if (
-            augmentation_step > 1
-        ):  # Skip the first step because it was already done above
-            augmented_train_loader = augment_loader(
+        while augmentation_step <= config["MAX_AUGMENTATION_STEPS"]:
+            # Perform augmentation
+            augmented_train_loader, logs = augment_loader(
                 # augmented_train_loader = simple_augment_loader(
                 augmented_train_loader,
                 vae_current,
@@ -173,66 +116,105 @@ def pipeline(config=config, visualizations=False):
                 scaler=scaler,
                 num_classes=nb_classes,
                 alpha=config["ALPHA"],
+                logs=logs,
+                step=augmentation_step,
             )
-        # if visualizations:
-        #     plot_latent_space_viz(
-        #         vae_current,
-        #         augmented_train_loader,
-        #         test_dataset,
-        #         num_classes=nb_classes,
-        #         type="2d",
-        #         id=f"dataset_{config['DATASET']}_before_augmented_step_{augmentation_step}",
-        #     )
-        print(
-            "#" * 50 + f"\nAugmented dataset size (step {augmentation_step}): ",
-            len(augmented_train_loader.dataset),
-        )
-
-        if config["TEST_AUGMENT"]:
+            # plot_latent_space_viz(
+            #     vae_current,
+            #     augmented_train_loader,
+            #     test_dataset,
+            #     num_classes=nb_classes,
+            #     type="2d",
+            #     id=f"dataset_{config['DATASET']}_before_augmented_step_{augmentation_step}",
+            # )
             print(
-                "#" * 50
-                + f"\nTraining the VAE model on augmented data (step {augmentation_step})..."
+                "#" * 50 + f"\nAugmented dataset size (step {augmentation_step}): ",
+                len(augmented_train_loader.dataset),
             )
-            vae_current = to_default_device(
-                VAE(
-                    input_dim,
-                    nb_classes,
-                    latent_dim=config["LATENT_DIM"],
-                    learning_rate=config["VAE_LEARNING_RATE"],
-                    hidden_dim=config["VAE_HIDDEN_DIM"],
-                    knn=min(
-                        config["VAE_KNN"], len(augmented_train_loader.dataset) // 2
-                    ),
+
+            if config["TEST_AUGMENT"]:
+                print(
+                    "#" * 50
+                    + f"\nTraining the VAE model on augmented data (step {augmentation_step})..."
                 )
-            )
+                vae_current = to_default_device(
+                    VAE(
+                        input_dim,
+                        nb_classes,
+                        latent_dim=config["LATENT_DIM"],
+                        learning_rate=config["VAE_LEARNING_RATE"],
+                        hidden_dim=config["VAE_HIDDEN_DIM"],
+                        knn=min(
+                            config["VAE_KNN"], len(augmented_train_loader.dataset) // 2
+                        ),
+                    )
+                )
 
-            vae_current, logs = vae_current.train_vae(
-                augmented_train_loader,
-                test_dataset,
-                nb_classes,
-                config,
-                logs,
-                name=f"vae_augmented_step_{augmentation_step}",
-            )
-
-            if visualizations:
-                plot_latent_space_viz(
-                    vae_current,
+                vae_current, logs = vae_current.train_vae(
                     augmented_train_loader,
                     test_dataset,
-                    num_classes=nb_classes,
-                    type="3d",
-                    id=f"dataset_{config['DATASET']}_augmented_step_{augmentation_step}",
+                    nb_classes,
+                    config,
+                    logs,
+                    name=f"vae_augmented_step_{augmentation_step}",
                 )
 
-        # # ---------------------------- Classifier Training ---------------------------- #
+                # plot_latent_space_viz(
+                #     vae_current,
+                #     augmented_train_loader,
+                #     test_dataset,
+                #     num_classes=nb_classes,
+                #     type="3d",
+                #     id=f"dataset_{config['DATASET']}_augmented_step_{augmentation_step}",
+                # )
 
+            # # ---------------------------- Classifier Training ---------------------------- #
+
+            print(
+                "#" * 50
+                + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
+            )
+            if config["CLASSIFIER"] == "FCN":
+                classifier_current = to_default_device(
+                    Classifier_FCN(
+                        input_dim,
+                        nb_classes,
+                        learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                        weight_decay=config["WEIGHT_DECAY"],
+                    )
+                )
+            else:
+                classifier_current = to_default_device(
+                    Classifier_RESNET(
+                        input_dim,
+                        nb_classes,
+                        learning_rate=config["CLASSIFIER_LEARNING_RATE"],
+                        weight_decay=config["WEIGHT_DECAY"],
+                    )
+                )
+
+            classifier_current, logs = classifier_current.train_classifier(
+                augmented_train_loader,
+                test_dataset,
+                config,
+                logs,
+                name=f"classifier_augmented_step_{augmentation_step}",
+            )
+
+            augmentation_step += 1
+
+        end_time = time.time()
+        logs["execution_time"] = end_time - start_time
+        
+        
+    else:
+        start_time = time.time()
+        augmentation_step = 0
         print(
-            "#" * 50
-            + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
-        )
+                "#" * 50
+                + f"\nTraining the classifier on augmented data (step {augmentation_step})..."
+            )
         if config["CLASSIFIER"] == "FCN":
-            print("Using FCN classifier")
             classifier_current = to_default_device(
                 Classifier_FCN(
                     input_dim,
@@ -242,7 +224,6 @@ def pipeline(config=config, visualizations=False):
                 )
             )
         else:
-            print("Using ResNet classifier")
             classifier_current = to_default_device(
                 Classifier_RESNET(
                     input_dim,
@@ -253,7 +234,7 @@ def pipeline(config=config, visualizations=False):
             )
 
         classifier_current, logs = classifier_current.train_classifier(
-            augmented_train_loader,
+            train_loader,
             test_dataset,
             config,
             logs,

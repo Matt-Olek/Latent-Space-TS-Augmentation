@@ -24,6 +24,10 @@ class VAE(nn.Module):
         latent_dim=720,
         learning_rate=1e-4,
         knn=5,
+        recon_weight=1,
+        kl_weight=1,
+        classifier_weight=1,
+        contrastive_weight=1,
     ):
         super(VAE, self).__init__()
         self.input_dim = input_dim
@@ -49,6 +53,11 @@ class VAE(nn.Module):
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.1, patience=100
         )
+        
+        self.recon_weight = recon_weight
+        self.kl_weight = kl_weight
+        self.classifier_weight = classifier_weight
+        self.contrastive_weight = contrastive_weight
 
     def build_encoder(self, input_dim, hidden_dim):
         return nn.Sequential(
@@ -149,7 +158,7 @@ class VAE(nn.Module):
             recon_loss = nn.functional.mse_loss(x_hat, x, reduction="mean")
 
             # Combine losses
-            loss = contrastive_loss + recon_loss + class_loss + kl_div
+            loss = contrastive_loss * self.contrastive_weight + kl_div * self.kl_weight + class_loss * self.classifier_weight + recon_loss * self.recon_weight
 
             # Backward pass
             loss.backward()

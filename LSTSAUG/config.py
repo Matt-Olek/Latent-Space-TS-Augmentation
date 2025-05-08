@@ -1,7 +1,8 @@
 config = {
     # ---------------- DATA PARAMETERS---------------- #
-    "DATA_DIR": "data/",
-    "RESULTS_DIR": "results/ABLATION_CLSTR/",
+    "DATA_DIR": "./data/",
+    "RESULTS_DIR": "results_hp/latentAug",
+    "RESULTS_DIR_ROOT": "results_hp/latentAug",
     "MODEL_DIR": "models",
     "DATASET": "MedicalImages",
     # ---------------- MODEL PARAMETERS ---------------- #
@@ -20,6 +21,11 @@ config = {
     "WEIGHT_DECAY": 1e-6,
     "SAVE_VAE": False,
     "SAVE_CLASSIFIER": False,
+    # ---------------- LOSS PARAMETERS ---------------- #
+    "RECON_WEIGHT": 1,
+    "KL_WEIGHT": 1,
+    "CLASSIFIER_WEIGHT": 1,
+    "CONTRASTIVE_WEIGHT": 1,
     # ---------------- AUGMENTATION PARAMETERS ---------------- #
     "MAX_AUGMENTATION_STEPS": 3,
     "AUGMENT_PLOT": False,

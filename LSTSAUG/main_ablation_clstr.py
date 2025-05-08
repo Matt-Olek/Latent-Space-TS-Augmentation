@@ -1,4 +1,4 @@
-from pipeline import pipeline
+from pipeline_ablation_clstr import pipeline
 from utils import save_logs, get_default_device
 from config import config
 import time

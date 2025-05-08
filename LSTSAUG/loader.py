@@ -14,6 +14,57 @@ import pyro.distributions as dist
 # ---------------------------------- Data Loader ----------------------------------#
 
 
+def malwareLoader(data_dir, batch_size, transform=None, plot=True):
+    # Define paths to training and testing data
+    data_dir = data_dir + "UCI_HAR_Dataset/"
+    train_data_path = data_dir + "train/X_train.txt"
+    train_labels_path = data_dir + "train/y_train.txt"
+    test_data_path = data_dir + "test/X_test.txt"
+    test_labels_path = data_dir + "test/y_test.txt"
+
+    # Load the training and testing data
+    X_train = pd.read_csv(train_data_path, delim_whitespace=True, header=None).values
+    y_train = pd.read_csv(
+        train_labels_path, delim_whitespace=True, header=None
+    ).values.flatten()
+    X_test = pd.read_csv(test_data_path, delim_whitespace=True, header=None).values
+    y_test = pd.read_csv(
+        test_labels_path, delim_whitespace=True, header=None
+    ).values.flatten()
+
+    batch_size = max(batch_size, len(X_train) // 10)
+    # Get the number of classes
+    nb_classes = len(np.unique(y_train))
+
+    y_train = y_train - min(y_train)
+    y_test = y_test - min(y_test)
+
+    # Scale the data to the range [-1, 1]
+    scaler = MinMaxScaler(feature_range=(-1, 1))
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # Convert the data and labels to PyTorch tensors
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.int64)
+    X_test = torch.tensor(X_test, dtype=torch.float32)
+    y_test = torch.tensor(y_test, dtype=torch.int64)
+
+    # One-hot encode the class labels
+    y_train = torch.nn.functional.one_hot(y_train, num_classes=nb_classes)
+    y_test = torch.nn.functional.one_hot(y_test, num_classes=nb_classes)
+
+    # Create TensorDataset for training and testing data
+    train_dataset = TensorDataset(X_train, y_train)
+    test_dataset = [X_test, y_test]
+
+    # Create DataLoader for training data
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Return the train loader, test dataset, number of classes, and the scaler
+    return train_loader, test_dataset, nb_classes, scaler
+
+
 def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
     path = data_dir + "/UCRArchive_2018/{}/".format(dataset_name)
 
@@ -46,7 +97,7 @@ def getUCRLoader(data_dir, dataset_name, batch_size, transform=None, plot=True):
         )
         print("Number of detected samples in the test set : {}".format(len(test_data)))
 
-    # batch_size = max(batch_size, len(train_data) // 10)
+    batch_size = max(batch_size, len(train_data) // 10)
     if plot:
         print("Batch size : {}".format(batch_size))
     train_np = train_data.to_numpy()

@@ -109,18 +109,18 @@ class VAE(nn.Module):
         self.knn.fit(z.detach().cpu().numpy(), y.argmax(dim=1).cpu().numpy())
 
     def contrastive_loss(self, z, labels, margin=1.0):
-        pairwise_distances = torch.cdist(z, z, p=2)
-        labels = labels.argmax(dim=1)
-        positive_mask = labels.unsqueeze(0) == labels.unsqueeze(1)
-        negative_mask = ~positive_mask
+        # pairwise_distances = torch.cdist(z, z, p=2)
+        # labels = labels.argmax(dim=1)
+        # positive_mask = labels.unsqueeze(0) == labels.unsqueeze(1)
+        # negative_mask = ~positive_mask
 
-        positive_loss = positive_mask * pairwise_distances.pow(2)
-        negative_loss = negative_mask * nn.functional.relu(
-            margin - pairwise_distances
-        ).pow(2)
+        # positive_loss = positive_mask * pairwise_distances.pow(2)
+        # negative_loss = negative_mask * nn.functional.relu(
+        #     margin - pairwise_distances
+        # ).pow(2)
 
-        contrastive_loss = (positive_loss + negative_loss).mean()
-        return contrastive_loss
+        # contrastive_loss = (positive_loss + negative_loss).mean()
+        return torch.tensor(0.0, device=z.device, requires_grad=True)
 
     def calculate_kl_divergence(self, mu, log_var):
         return -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())

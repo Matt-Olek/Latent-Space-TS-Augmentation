@@ -1,7 +1,7 @@
 config = {
     # ---------------- DATA PARAMETERS---------------- #
     "DATA_DIR": "data/",
-    "RESULTS_DIR": "results/latentAug",
+    "RESULTS_DIR": "results/ABLATION_CLSTR/",
     "MODEL_DIR": "models",
     "DATASET": "MedicalImages",
     # ---------------- MODEL PARAMETERS ---------------- #
@@ -21,7 +21,7 @@ config = {
     "SAVE_VAE": False,
     "SAVE_CLASSIFIER": False,
     # ---------------- AUGMENTATION PARAMETERS ---------------- #
-    "MAX_AUGMENTATION_STEPS": 5,
+    "MAX_AUGMENTATION_STEPS": 3,
     "AUGMENT_PLOT": False,
     "TEST_AUGMENT": True,
     "USE_TRAINED": False,

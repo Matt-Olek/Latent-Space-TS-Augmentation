@@ -1,7 +1,7 @@
 import os
 import torch
 from utils import get_model_path
-from VAE import VAE
+from VAE_clstr import VAE
 from ClassifierModel import Classifier_RESNET
 from ClassifierModelFCN import Classifier_FCN
 from config import config

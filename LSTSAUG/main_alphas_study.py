@@ -6,17 +6,13 @@ import os
 import itertools
 from tqdm import tqdm
 import pandas as pd
+
 import warnings
 warnings.filterwarnings("ignore", message=".*cudnnException.*CUDNN_STATUS_NOT_SUPPORTED.*", category=UserWarning, module="torch")
 
-log_error = True
+log_error = False
 
-RECON_WEIGHT_GRID = [1, 3, 5, 10]
-KL_WEIGHT_GRID = [1, 3, 5, 10]
-CLASSIFIER_WEIGHT_GRID = [1, 3, 5, 10]
-CONTRASTIVE_WEIGHT_GRID = [1, 3, 5, 10]
-
-grid = list(itertools.product(RECON_WEIGHT_GRID, KL_WEIGHT_GRID, CLASSIFIER_WEIGHT_GRID, CONTRASTIVE_WEIGHT_GRID))
+ALPHAS_GRID = [1, 1.5, 2, 2.5, 3, 4, 5, 10]
 
 datasets_names_benchmark = pd.read_csv("baselines.csv", sep=";", skiprows=1).iloc[:, 0].tolist()
 
@@ -54,16 +50,12 @@ def main():
 
 if __name__ == "__main__":
     
-    print(f'Grid search with {len(grid)} configurations')
+    print(f'Alphas search with {len(ALPHAS_GRID)} configurations')
     
-    for i in tqdm(range(len(grid))):
-        
-        # Normalizing the weights so that they sum to 1
-        total = sum(grid[i])
-        grid[i] = [x / total for x in grid[i]]
-        
-        config["RECON_WEIGHT"] = grid[i][0]
-        config["KL_WEIGHT"] = grid[i][1]
-        config["CLASSIFIER_WEIGHT"] = grid[i][2]
-        config["CONTRASTIVE_WEIGHT"] = grid[i][3]
+    config["RESULTS_DIR"] = "results_alphas/latentAug"
+    config["RESULTS_DIR_ROOT"] = "results_alphas/latentAug"
+    
+    for i in tqdm(range(len(ALPHAS_GRID))):
+        config["ALPHA"] = ALPHAS_GRID[i]
         main()
+        print(f"Alpha: {ALPHAS_GRID[i]} done!")

@@ -5,7 +5,12 @@ import time
 import pandas as pd
 import os
 
+
+datasets_names_benchmark = pd.read_csv("baselines.csv", sep=";", skiprows=1).iloc[:, 0].tolist()
+
+
 if __name__ == "__main__":
+
     classifier_Types = ["FCN"]  # "FCN",
     print(os.getcwd())
     # datasets_names = open("data/datasets_names.txt", "r").read().split("\n")
@@ -20,6 +25,9 @@ if __name__ == "__main__":
     # selected_datasets = pd.read_csv("data/selected_datasets.csv")
     # selected_datasets = selected_datasets["dataset"].values
     # print("Selected datasets:", selected_datasets)
+
+    classifier_Types = ["Resnet"]  # "FCN",
+
     current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
     for classifier_Type in classifier_Types:
         config["CLASSIFIER"] = classifier_Type

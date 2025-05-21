@@ -254,7 +254,7 @@ def augment_loader(
         max_logprob_other, _ = torch.max(log_probs_others, dim=0)
         # print(max_logprob_other.shape)
         # Filtrage via log-ratio : on garde uniquement les échantillons plus probables pour la classe cible
-        margin = .5  
+        margin = 0.5
         keep_mask = log_prob_target > (max_logprob_other + margin)
 
         z_samples = z_samples[keep_mask]

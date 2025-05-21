@@ -214,15 +214,20 @@ def augment_loader(
 
         # On stocke tous les log_probs des autres classes
         log_probs_other = []
-        
-
+        # print(mu.shape)
+        # print(f'==== class idx : {class_idx} ====')
         for other_idx in range(num_classes):
             if other_idx == class_idx:
                 continue
+            # print(f'other_idx : {other_idx}')
             other_mask = (y.argmax(dim=1) == other_idx)
+            # print(other_mask.shape)
+            # print(f'other_idx : {other_idx}, sum : {other_mask.sum()}')
             if other_mask.sum() == 0:
                 continue
 
+
+            
             mu_other = mu[other_mask]
             mean_o = mu_other.mean(dim=0)
             cov_o = torch.cov(mu_other.T) + eps * torch.eye(mu_other.size(1), device=device)
@@ -234,15 +239,22 @@ def augment_loader(
 
         # Calcul du log-prob de la classe cible (déjà fait)
         log_prob_target = log_prob_class
+        # print('de la classe')
+        # print(log_prob_target.shape)
 
         # On empile les log-probs des autres classes (skip index 0 qui est la classe cible)
-        log_probs_others = torch.stack(log_probs_other[1:], dim=0)
-
+        if num_classes > 2:
+            
+            log_probs_others = torch.stack(log_probs_other[1:], dim=0)
+        else:
+            log_probs_others = torch.stack(log_probs_other, dim=0)
+        # print('des autres classes')
+        # print(log_probs_others.shape)
         # Calcul de la meilleure log-prob parmi les autres classes (worst-case filtering)
         max_logprob_other, _ = torch.max(log_probs_others, dim=0)
-
+        # print(max_logprob_other.shape)
         # Filtrage via log-ratio : on garde uniquement les échantillons plus probables pour la classe cible
-        margin = 0.0  # tu peux tester avec 0.1 ou 0.5 pour plus de séparation
+        margin = 0.5
         keep_mask = log_prob_target > (max_logprob_other + margin)
 
         z_samples = z_samples[keep_mask]
@@ -264,6 +276,8 @@ def augment_loader(
 
     X_aug = torch.cat(X_aug_list, dim=0)
     y_aug = torch.cat(y_aug_list, dim=0)
+    
+    print(f'AUGMENTED DATA : {X_aug.shape}, {y_aug.shape}')
 
     if return_augmented_only:
         return DataLoader(TensorDataset(X_aug, y_aug), batch_size=batch_size, shuffle=True), logs

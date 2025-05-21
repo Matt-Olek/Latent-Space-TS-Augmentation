@@ -3,16 +3,31 @@ from utils import save_logs, get_default_device
 from config import config
 import time
 import pandas as pd
+import os
 
 
 datasets_names_benchmark = pd.read_csv("baselines.csv", sep=";", skiprows=1).iloc[:, 0].tolist()
 
 
 if __name__ == "__main__":
+
+    classifier_Types = ["FCN"]  # "FCN",
+    print(os.getcwd())
+    # datasets_names = open("data/datasets_names.txt", "r").read().split("\n")
+    # tokeep = pd.read_csv("ResNet_all.csv", sep=";")
+    # datasets_names = tokeep["dataset"].values
+    # # datasets_names = os.listdir("data/UCR")
+    # # prendre les datasers apres le dataset MedicalImages
+    # idx = datasets_names.tolist().index("Rock")
+    # datasets_names = datasets_names[idx + 1 :]
+    datasets_names = ['StarLightCurves']
+    
+    # selected_datasets = pd.read_csv("data/selected_datasets.csv")
+    # selected_datasets = selected_datasets["dataset"].values
+    # print("Selected datasets:", selected_datasets)
+
     classifier_Types = ["Resnet"]  # "FCN",
-    datasets_names = datasets_names_benchmark
-    selected_datasets = datasets_names
-    print("Selected datasets:", selected_datasets)
+
     current_time = time.strftime("%Y-%m-%d_%H-%M-%S")
     for classifier_Type in classifier_Types:
         config["CLASSIFIER"] = classifier_Type

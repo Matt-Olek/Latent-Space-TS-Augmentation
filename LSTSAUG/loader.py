@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 import tsaug
 import pyro
 import pyro.distributions as dist
-from gmmx import GaussianMixtureModelJax, EMFitter
+from torch.distributions import Categorical, MixtureSameFamily, MultivariateNormal
 
 # ---------------------------------- Data Loader ----------------------------------#
 
@@ -174,43 +174,39 @@ def augment_loader(
         mu, log_var = model.encode(X)
 
     X_aug_list, y_aug_list = [], []
-
+    covs_all = torch.stack([torch.diag(torch.exp(log_var[i])) for i in range(len(log_var))], dim=0)
+    
+    mixtures = {}
     for class_idx in range(num_classes):
         class_mask = (y.argmax(dim=1) == class_idx)
         if class_mask.sum() == 0:
             continue
 
         mu_class = mu[class_mask]
-        log_var_class = log_var[class_mask]
-
+        cov_class = covs_all[class_mask]
         
         
-        # cov = centered.T @ centered / (mu_class.size(0) - 1)
-        # cov = torch.diag(torch.exp(log_var_class).mean(dim=0)) * alpha
-        # cov_e = np.cov(mu_class.T.cpu(), bias=False)  # shape: (D, D)
-        # to cuda
-        # cov_e = torch.tensor(cov_e, dtype=torch.float32, device=device)
+        # Construction des mixtures 
+        
+        
+        probs  = torch.ones(len(mu_class), device=device) / len(mu_class)
 
-        eps = 1e-4  # ou 1e-6 selon stabilité
+            # mixture scalée (comme avant)
+        mix_s = MixtureSameFamily(Categorical(probs),
+                                    MultivariateNormal(loc=mu_class,
+                                                        covariance_matrix=alpha*cov_class))
+        mixtures[class_idx] = mix_s
 
-        mean = mu_class.mean(dim=0)
-        cov = torch.cov(mu_class.T)  # shape: (D, D)
-        cov += eps * torch.eye(cov.shape[0], device=device)  # régularisation
-        cov = cov * alpha  # extension
-
-
-        # print(f"[Class {class_idx}] cov shape: {cov.shape}, min diag: {cov.diag().min()}, max diag: {cov.diag().max()}")
-
-        mvn = dist.MultivariateNormal(mean, covariance_matrix=cov)
-        z_samples = mvn.sample((num_samples,)).to(device)
+        
+        # Sampling from the mixture model
+        z_samples = mix_s.sample((num_samples,)).to(device)
 
         # log-prob filtering
-        # log_prob_class = mvn.log_prob(z_samples)
-        # keep_mask = torch.ones(num_samples, dtype=torch.bool, device=device)
+        
         
 
-# Log prob de la vraie classe pour tous les samples
-        log_prob_class = mvn.log_prob(z_samples)
+        # Log prob de la vraie classe pour tous les samples
+        log_prob_class = mix_s.log_prob(z_samples)
 
         # On stocke tous les log_probs des autres classes
         log_probs_other = []
@@ -229,12 +225,14 @@ def augment_loader(
 
             
             mu_other = mu[other_mask]
-            mean_o = mu_other.mean(dim=0)
-            cov_o = torch.cov(mu_other.T) + eps * torch.eye(mu_other.size(1), device=device)
-            cov_o = cov_o * alpha
+            cov_other = covs_all[other_mask]
 
-            mvn_o = dist.MultivariateNormal(mean_o, covariance_matrix=cov_o)
-            log_prob_other = mvn_o.log_prob(z_samples)
+            mixture_other = MixtureSameFamily(
+                Categorical(torch.ones(len(mu_other), device=device) / len(mu_other)),
+                MultivariateNormal(loc=mu_other, covariance_matrix=alpha * cov_other)
+            )
+            
+            log_prob_other = mixture_other.log_prob(z_samples)
             log_probs_other.append(log_prob_other)
 
         # Calcul du log-prob de la classe cible (déjà fait)
@@ -254,7 +252,7 @@ def augment_loader(
         max_logprob_other, _ = torch.max(log_probs_others, dim=0)
         # print(max_logprob_other.shape)
         # Filtrage via log-ratio : on garde uniquement les échantillons plus probables pour la classe cible
-        margin = 0.5
+        margin = 0.0
         keep_mask = log_prob_target > (max_logprob_other + margin)
 
         z_samples = z_samples[keep_mask]
